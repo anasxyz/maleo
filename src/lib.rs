@@ -1,7 +1,10 @@
 // src/lib.rs
 
 mod shapes;
+mod app;
+
 pub use shapes::ShapeRenderer;
+pub use app::{App, Canvas};
 
 use glyphon::{
     FontSystem, SwashCache, TextAtlas, TextRenderer as GlyphonRenderer,

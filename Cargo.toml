@@ -7,6 +7,8 @@ edition = "2024"
 wgpu = "0.19"
 glyphon = "0.5"
 bytemuck = { version = "1.14", features = ["derive"] }
+winit = "0.29"
+pollster = "0.3"
 
 [dev-dependencies]
 winit = "0.29"
