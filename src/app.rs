@@ -20,6 +20,7 @@ pub struct App {
     surface_format: wgpu::TextureFormat,
     msaa_texture: wgpu::Texture,
     msaa_view: wgpu::TextureView,
+    scale_factor: f64,
 }
 
 pub struct Canvas<'a> {
@@ -27,6 +28,7 @@ pub struct Canvas<'a> {
     pub text: &'a mut TextRenderer,
     pub width: f32,
     pub height: f32,
+    pub scale_factor: f64,
 }
 
 impl App {
@@ -39,7 +41,7 @@ impl App {
         let window = Arc::new(
             WindowBuilder::new()
                 .with_title(title)
-                .with_inner_size(winit::dpi::PhysicalSize::new(width, height))
+                .with_inner_size(winit::dpi::LogicalSize::new(width, height)) // Use logical size
                 .build(&event_loop)
                 .unwrap(),
         );
@@ -71,11 +73,15 @@ impl App {
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps.formats[0];
 
+        // Use physical size for rendering, but track scale factor
+        let physical_size = window.inner_size();
+        let scale_factor = window.scale_factor();
+        
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width,
-            height,
+            width: physical_size.width,
+            height: physical_size.height,
             present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
@@ -97,6 +103,7 @@ impl App {
             surface_format,
             msaa_texture,
             msaa_view,
+            scale_factor,
         }
     }
 
@@ -128,8 +135,8 @@ impl App {
         let mut shape_renderer = ShapeRenderer::new(
             &self.device,
             self.surface_format,
-            self.config.width as f32,
-            self.config.height as f32,
+            (self.config.width as f64 / self.scale_factor) as f32,
+            (self.config.height as f64 / self.scale_factor) as f32,
         );
 
         let mut text_renderer = TextRenderer::new(&self.device, &self.queue, self.surface_format);
@@ -144,6 +151,29 @@ impl App {
                     event,
                     window_id,
                 } if window_id == self.window.id() => match event {
+                    WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                        self.scale_factor = scale_factor;
+                        let physical_size = self.window.inner_size();
+                        self.config.width = physical_size.width;
+                        self.config.height = physical_size.height;
+                        self.surface.configure(&self.device, &self.config);
+
+                        // Recreate MSAA texture
+                        self.msaa_texture = Self::create_msaa_texture(
+                            &self.device,
+                            &self.config,
+                            self.surface_format,
+                        );
+                        self.msaa_view = self
+                            .msaa_texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+
+                        shape_renderer.resize(
+                            (self.config.width as f64 / self.scale_factor) as f32,
+                            (self.config.height as f64 / self.scale_factor) as f32,
+                        );
+                        self.window.request_redraw();
+                    }
                     WindowEvent::Resized(new_size) => {
                         self.config.width = new_size.width;
                         self.config.height = new_size.height;
@@ -160,8 +190,8 @@ impl App {
                             .create_view(&wgpu::TextureViewDescriptor::default());
 
                         shape_renderer.resize(
-                            self.config.width as f32,
-                            self.config.height as f32,
+                            (self.config.width as f64 / self.scale_factor) as f32,
+                            (self.config.height as f64 / self.scale_factor) as f32,
                         );
                         self.window.request_redraw();
                     }
@@ -198,8 +228,9 @@ impl App {
                             let mut canvas = Canvas {
                                 shapes: &mut shape_renderer,
                                 text: &mut text_renderer,
-                                width: self.config.width as f32,
-                                height: self.config.height as f32,
+                                width: (self.config.width as f64 / self.scale_factor) as f32,
+                                height: (self.config.height as f64 / self.scale_factor) as f32,
+                                scale_factor: self.scale_factor,
                             };
                             render_fn(&mut canvas);
 
