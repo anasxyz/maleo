@@ -12,6 +12,9 @@ pub struct TextRenderer {
     atlas: TextAtlas,
     renderer: GlyphonRenderer,
     text_buffers: Vec<(Buffer, f32, f32, f32)>, // Buffer, x, y, scale_factor
+    screen_width: f32,
+    screen_height: f32,
+    scale_factor: f64,
 }
 
 impl TextRenderer {
@@ -41,7 +44,22 @@ impl TextRenderer {
             atlas,
             renderer,
             text_buffers: Vec::new(),
+            screen_width: 800.0,
+            screen_height: 600.0,
+            scale_factor: 1.0,
         }
+    }
+
+    /// Update screen dimensions and scale factor
+    pub fn resize(&mut self, width: f32, height: f32, scale_factor: f64) {
+        self.screen_width = width;
+        self.screen_height = height;
+        self.scale_factor = scale_factor;
+    }
+
+    /// Simple API: just draw text at x, y
+    pub fn draw(&mut self, text: &str, x: f32, y: f32) {
+        self.queue_text(text, x, y, self.screen_width, self.screen_height, self.scale_factor);
     }
 
     /// Queue text to be drawn (doesn't render yet)
@@ -59,7 +77,7 @@ impl TextRenderer {
         // Scale font metrics by DPI for consistent visual size
         let mut buffer = Buffer::new(
             &mut self.font_system,
-            Metrics::new(12.0 * scale, 35.0 * scale),
+            Metrics::new(22.0 * scale, 35.0 * scale),
         );
 
         // Set buffer size in logical coordinates
@@ -69,7 +87,7 @@ impl TextRenderer {
         buffer.set_text(
             &mut self.font_system,
             text,
-            Attrs::new().family(Family::Name("ZedMono Nerd Font")),
+            Attrs::new().family(Family::Name("JetBrainsMono Nerd Font")),
             Shaping::Advanced,
         );
         

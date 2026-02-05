@@ -137,6 +137,11 @@ impl App {
         );
 
         let mut text_renderer = TextRenderer::new(&self.device, &self.queue, self.surface_format);
+        text_renderer.resize(
+            (self.config.width as f64 / self.scale_factor) as f32,
+            (self.config.height as f64 / self.scale_factor) as f32,
+            self.scale_factor,
+        );
         let mut scene = Scene::new();
 
         let event_loop = self.event_loop.take().unwrap();
@@ -165,10 +170,11 @@ impl App {
                             .msaa_texture
                             .create_view(&wgpu::TextureViewDescriptor::default());
 
-                        shape_renderer.resize(
-                            (self.config.width as f64 / self.scale_factor) as f32,
-                            (self.config.height as f64 / self.scale_factor) as f32,
-                        );
+                        let logical_width = (self.config.width as f64 / self.scale_factor) as f32;
+                        let logical_height = (self.config.height as f64 / self.scale_factor) as f32;
+                        
+                        shape_renderer.resize(logical_width, logical_height);
+                        text_renderer.resize(logical_width, logical_height, self.scale_factor);
                         scene.mark_dirty();
                         self.window.request_redraw();
                     }
@@ -186,10 +192,11 @@ impl App {
                             .msaa_texture
                             .create_view(&wgpu::TextureViewDescriptor::default());
 
-                        shape_renderer.resize(
-                            (self.config.width as f64 / self.scale_factor) as f32,
-                            (self.config.height as f64 / self.scale_factor) as f32,
-                        );
+                        let logical_width = (self.config.width as f64 / self.scale_factor) as f32;
+                        let logical_height = (self.config.height as f64 / self.scale_factor) as f32;
+                        
+                        shape_renderer.resize(logical_width, logical_height);
+                        text_renderer.resize(logical_width, logical_height, self.scale_factor);
                         scene.mark_dirty();
                         self.window.request_redraw();
                     }

@@ -123,6 +123,11 @@ impl ShapeRenderer {
         ]);
     }
 
+    /// Alias for rect()
+    pub fn draw_rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: [f32; 4]) {
+        self.rect(x, y, w, h, color);
+    }
+
     /// Draw a filled circle
     pub fn circle(&mut self, cx: f32, cy: f32, radius: f32, color: [f32; 4]) {
         let segments = 32;
@@ -145,6 +150,11 @@ impl ShapeRenderer {
         }
     }
 
+    /// Alias for circle()
+    pub fn draw_circle(&mut self, cx: f32, cy: f32, radius: f32, color: [f32; 4]) {
+        self.circle(cx, cy, radius, color);
+    }
+
     /// Draw a rounded rectangle
     pub fn rounded_rect(&mut self, x: f32, y: f32, w: f32, h: f32, radius: f32, color: [f32; 4]) {
         let radius = radius.min(w / 2.0).min(h / 2.0);
@@ -161,6 +171,11 @@ impl ShapeRenderer {
         self.quarter_circle(x + w - radius, y + radius, radius, color, 3); // Top-right
         self.quarter_circle(x + w - radius, y + h - radius, radius, color, 0); // Bottom-right
         self.quarter_circle(x + radius, y + h - radius, radius, color, 1); // Bottom-left
+    }
+
+    /// Alias for rounded_rect()
+    pub fn draw_rounded_rect(&mut self, x: f32, y: f32, w: f32, h: f32, radius: f32, color: [f32; 4]) {
+        self.rounded_rect(x, y, w, h, radius, color);
     }
 
     /// Draw a quarter circle (for rounded corners)
