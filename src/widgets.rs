@@ -25,7 +25,7 @@ impl WidgetRenderer {
         
         // Measure and center text
         let base_font_size = 22.0;
-        let available_width = w - 12.0;
+        let available_width = w - 5.0;
         let available_height = h - 10.0;
         
         let (text_width, _) = text.measure_text(label, base_font_size);
@@ -46,7 +46,7 @@ impl WidgetRenderer {
         
         // Center using font size, not measured height
         let text_x = x + (w - final_w) / 2.0;
-        let text_y = y + h / 2.0 - font_size * 0.60;
+        let text_y = y + h / 2.0 - font_size * 0.69;
         
         text.draw_sized(label, text_x, text_y, font_size);
     }
