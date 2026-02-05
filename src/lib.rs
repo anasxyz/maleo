@@ -6,7 +6,6 @@ mod text;
 mod app;
 mod scene;
 mod canvas;
-pub mod widgets;
 
 pub use gpu::{GpuContext, RenderFrame, FrameFinisher};
 pub use shapes::ShapeRenderer;
