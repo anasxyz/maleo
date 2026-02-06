@@ -1,5 +1,3 @@
-#[allow(dead_code, unused)]
-
 use std::sync::Arc;
 use winit::{
     event::{ElementState, Event, MouseButton, WindowEvent},
