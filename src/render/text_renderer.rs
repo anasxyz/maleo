@@ -56,8 +56,8 @@ impl TextRenderer {
     }
 
     /// just draw text at x, y
-    pub fn draw(&mut self, text: &str, x: f32, y: f32) {
-        self.queue_text(text, x, y, self.screen_width, self.screen_height, self.scale_factor);
+    pub fn draw(&mut self, text: &str, font_size: f32, x: f32, y: f32) {
+        self.queue_text(text, x, y, font_size, self.screen_width, self.screen_height, self.scale_factor);
     }
 
     /// queue text to be drawn, doesnt render yet
@@ -66,6 +66,7 @@ impl TextRenderer {
         text: &str,
         x: f32,
         y: f32,
+        font_size: f32,
         screen_width: f32,
         screen_height: f32,
         scale_factor: f64,
@@ -75,7 +76,7 @@ impl TextRenderer {
         // scale font metrics by dpi for consistent visual size
         let mut buffer = Buffer::new(
             &mut self.font_system,
-            Metrics::new(22.0 * scale, 35.0 * scale),
+            Metrics::new(font_size * scale, 35.0 * scale),
         );
 
         // set buffer size in logical coordinates
@@ -155,24 +156,5 @@ impl TextRenderer {
     /// clear all queued text
     pub fn clear(&mut self) {
         self.text_buffers.clear();
-    }
-
-    /// legacy method for compatibility, queues and renders immediately
-    #[deprecated(note="use `draw` instead")]
-    pub fn draw_text<'pass>(
-        &'pass mut self,
-        text: &str,
-        x: f32,
-        y: f32,
-        screen_width: f32,
-        screen_height: f32,
-        scale_factor: f64,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        pass: &mut wgpu::RenderPass<'pass>,
-    ) {
-        self.clear();
-        self.queue_text(text, x, y, screen_width, screen_height, scale_factor);
-        self.render(screen_width, screen_height, scale_factor, device, queue, pass);
     }
 }
