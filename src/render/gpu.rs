@@ -1,10 +1,8 @@
-// src/gpu.rs - All wgpu/GPU related stuff
-
 use std::sync::Arc;
 use wgpu;
 use winit::window::Window;
 
-/// GPU context - handles all wgpu resources
+/// gpu context - handles all wgpu resources
 pub struct GpuContext {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -15,7 +13,7 @@ pub struct GpuContext {
 }
 
 impl GpuContext {
-    /// Create a new GPU context for a window
+    /// create a new gpu context for a window
     pub async fn new(window: Arc<Window>) -> Self {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
         let surface = instance.create_surface(window.clone()).unwrap();
@@ -69,7 +67,7 @@ impl GpuContext {
         }
     }
 
-    /// Resize the surface and MSAA texture
+    /// resize the surface and msaa texture
     pub fn resize(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 {
             return;
@@ -82,7 +80,7 @@ impl GpuContext {
         self.msaa_texture = Self::create_msaa_texture(&self.device, &self.config, self.format);
     }
 
-    /// Create MSAA texture for anti-aliasing
+    /// create msaa texture for anti aliasing
     fn create_msaa_texture(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
@@ -104,7 +102,7 @@ impl GpuContext {
         })
     }
 
-    /// Begin a render pass
+    /// begin a render pass
     pub fn begin_frame(&mut self) -> Result<RenderFrame, wgpu::SurfaceError> {
         let frame = self.surface.get_current_texture()?;
         let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -122,7 +120,7 @@ impl GpuContext {
     }
 }
 
-/// A single render frame - owns everything needed for one frame
+/// a single render frame 
 pub struct RenderFrame {
     frame: wgpu::SurfaceTexture,
     view: wgpu::TextureView,
@@ -131,7 +129,7 @@ pub struct RenderFrame {
 }
 
 impl RenderFrame {
-    /// Begin a render pass - consumes self and returns encoder + finisher
+    /// begin a render pass, consumes self and returns encoder + finisher
     pub fn begin(mut self) -> (wgpu::CommandEncoder, FrameFinisher, wgpu::TextureView, wgpu::TextureView) {
         (
             self.encoder,
@@ -142,13 +140,13 @@ impl RenderFrame {
     }
 }
 
-/// Used to finish and present a frame after rendering
+/// used to finish and present a frame after rendering
 pub struct FrameFinisher {
     frame: wgpu::SurfaceTexture,
 }
 
 impl FrameFinisher {
-    /// Finish rendering and present the frame
+    /// finish rendering and present the frame
     pub fn present(self, encoder: wgpu::CommandEncoder, queue: &wgpu::Queue) {
         queue.submit(Some(encoder.finish()));
         self.frame.present();

@@ -1,15 +1,23 @@
-// src/lib.rs
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_imports)]
+#![allow(unused_mut)]
+#![allow(unused_imports)]
 
-mod gpu;
-mod shapes;
-mod text;
+mod render {
+    pub mod gpu;
+    pub mod shape_renderer;
+    pub mod text_renderer;
+}
+
+pub use render::gpu::{FrameFinisher, GpuContext, RenderFrame};
+pub use render::shape_renderer::ShapeRenderer;
+pub use render::text_renderer::TextRenderer;
+
 mod app;
-mod scene;
-mod canvas;
+mod mouse;
+mod ui;
 
-pub use gpu::{GpuContext, RenderFrame, FrameFinisher};
-pub use shapes::ShapeRenderer;
-pub use text::TextRenderer;
 pub use app::App;
-pub use canvas::{Canvas, MouseState};
-pub use scene::{Scene, DrawCommand};
+pub use mouse::MouseState;
+pub use ui::Ui;
