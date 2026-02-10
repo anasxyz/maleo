@@ -1,5 +1,4 @@
 use std::any::Any;
-
 use crate::{
     Ui,
     widgets::{Rect, Widget},
@@ -13,7 +12,6 @@ pub struct ButtonWidget {
     pub color: [f32; 4],
 }
 
-// builder pattern
 impl ButtonWidget {
     pub fn new(id: usize, text: &str) -> Self {
         Self {
@@ -30,30 +28,25 @@ impl ButtonWidget {
         }
     }
 
-    pub fn position(mut self, x: f32, y: f32) -> Self {
+    pub fn position(&mut self, x: f32, y: f32) -> &mut Self {
         self.bounds.x = x;
         self.bounds.y = y;
         self
     }
 
-    pub fn size(mut self, w: f32, h: f32) -> Self {
+    pub fn size(&mut self, w: f32, h: f32) -> &mut Self {
         self.bounds.w = w;
         self.bounds.h = h;
         self
     }
 
-    pub fn font_size(mut self, font_size: f32) -> Self {
+    pub fn font_size(&mut self, font_size: f32) -> &mut Self {
         self.font_size = font_size;
         self
     }
 
-    pub fn color(mut self, color: [f32; 4]) -> Self {
+    pub fn color(&mut self, color: [f32; 4]) -> &mut Self {
         self.color = color;
-        self
-    }
-
-    pub fn text(&mut self, text: &str) -> &mut Self {
-        self.text = text.to_string();
         self
     }
 }
