@@ -1,6 +1,6 @@
+#![allow(unused)]
 use rentex::{App, Fonts};
 use rentex::widgets::WidgetManager;
-use winit::keyboard::KeyCode;
 
 fn main() {
     let app = App::new("RNTX demo", 800, 600);
@@ -19,9 +19,13 @@ fn main() {
     let mut counter = 0;
 
     app.run(fonts, widgets, move |widgets, mouse, input| {
-        if input.just_pressed(KeyCode::Space) {
+        if widgets.get(btn).just_clicked {
             counter += 1;
             widgets.get_mut(btn).text(format!("Clicked: {}", counter));
+        }
+
+        if widgets.get(btn).just_hovered {
+            widgets.get_mut(btn).color([0.0, 1.0, 0.0, 1.0]);
         }
     });
 }

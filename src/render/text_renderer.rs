@@ -68,7 +68,7 @@ impl TextRenderer {
             Metrics::new(font_entry.size * scale, line_height * scale),
         );
 
-        buffer.set_size(font_system, self.screen_width - x * 2.0, self.screen_height - y * 2.0);
+        buffer.set_size(font_system, self.screen_width - x, self.screen_height - y);
         buffer.set_text(
             font_system,
             text,

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use winit::{
-    event::{ElementState, Event, MouseButton, WindowEvent},
+    event::{ElementState, Event, MouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     keyboard::PhysicalKey,
     window::{Window, WindowBuilder},
@@ -72,28 +72,74 @@ impl App {
                 Event::WindowEvent { event, window_id } if window_id == self.window.id() => {
                     match event {
                         WindowEvent::CursorMoved { position, .. } => {
-                            mouse.x = (position.x / self.scale_factor) as f32;
-                            mouse.y = (position.y / self.scale_factor) as f32;
+                            let new_x = (position.x / self.scale_factor) as f32;
+                            let new_y = (position.y / self.scale_factor) as f32;
+                            mouse.dx = new_x - mouse.x;
+                            mouse.dy = new_y - mouse.y;
+                            mouse.x = new_x;
+                            mouse.y = new_y;
+
+                            let widget_dirty = widgets.update_all(&mouse);
+                            update_fn(&mut widgets, &mouse, &input);
+                            let user_dirty = widgets.take_dirty();
+                            if widget_dirty { println!("CursorMoved: widget_dirty"); }
+                            if user_dirty { println!("CursorMoved: user_dirty"); }
+                            if widget_dirty || user_dirty {
+                                self.window.request_redraw();
+                            }
+                            mouse.dx = 0.0;
+                            mouse.dy = 0.0;
                         }
                         WindowEvent::MouseInput { state, button, .. } => {
+                            let pressed = state == ElementState::Pressed;
                             match button {
                                 MouseButton::Left => {
-                                    let pressed = state == ElementState::Pressed;
                                     mouse.left_just_pressed = pressed && !mouse.left_pressed;
                                     mouse.left_just_released = !pressed && mouse.left_pressed;
                                     mouse.left_pressed = pressed;
                                 }
                                 MouseButton::Right => {
-                                    mouse.right_pressed = state == ElementState::Pressed;
+                                    mouse.right_just_pressed = pressed && !mouse.right_pressed;
+                                    mouse.right_just_released = !pressed && mouse.right_pressed;
+                                    mouse.right_pressed = pressed;
+                                }
+                                MouseButton::Middle => {
+                                    mouse.middle_just_pressed = pressed && !mouse.middle_pressed;
+                                    mouse.middle_just_released = !pressed && mouse.middle_pressed;
+                                    mouse.middle_pressed = pressed;
                                 }
                                 _ => {}
                             }
+                            let widget_dirty = widgets.update_all(&mouse);
                             update_fn(&mut widgets, &mouse, &input);
-                            if widgets.take_dirty() {
+                            if widget_dirty || widgets.take_dirty() {
                                 self.window.request_redraw();
                             }
-                            input.keys_just_pressed.clear();
-                            input.keys_just_released.clear();
+                            mouse.left_just_pressed = false;
+                            mouse.left_just_released = false;
+                            mouse.right_just_pressed = false;
+                            mouse.right_just_released = false;
+                            mouse.middle_just_pressed = false;
+                            mouse.middle_just_released = false;
+                        }
+                        WindowEvent::MouseWheel { delta, .. } => {
+                            match delta {
+                                MouseScrollDelta::LineDelta(x, y) => {
+                                    mouse.scroll_x = x;
+                                    mouse.scroll_y = y;
+                                }
+                                MouseScrollDelta::PixelDelta(pos) => {
+                                    mouse.scroll_x = pos.x as f32;
+                                    mouse.scroll_y = pos.y as f32;
+                                }
+                            }
+                            let widget_dirty = widgets.update_all(&mouse);
+                            update_fn(&mut widgets, &mouse, &input);
+                            if widget_dirty || widgets.take_dirty() {
+                                self.window.request_redraw();
+                            }
+                            mouse.scroll_x = 0.0;
+                            mouse.scroll_y = 0.0;
                         }
                         WindowEvent::KeyboardInput { event, .. } => {
                             let pressed = event.state == ElementState::Pressed;
@@ -173,6 +219,8 @@ impl App {
         fonts: &mut Fonts,
         widgets: &mut WidgetManager,
     ) {
+        println!("redrawing");
+
         shape_renderer.clear();
         text_renderer.clear();
 

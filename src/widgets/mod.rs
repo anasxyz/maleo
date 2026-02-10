@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::marker::PhantomData;
 
-use crate::Ui;
+use crate::{MouseState, Ui};
 
 mod button;
 mod manager;
@@ -17,11 +17,18 @@ pub struct Rect {
     pub h: f32,
 }
 
+impl Rect {
+    pub fn contains(&self, x: f32, y: f32) -> bool {
+        x >= self.x && x <= self.x + self.w && y >= self.y && y <= self.y + self.h
+    }
+}
+
 pub trait Widget: Any {
     fn id(&self) -> usize;
     fn bounds(&self) -> Rect;
     fn set_bounds(&mut self, bounds: Rect);
-    fn render(&self, ui: &mut Ui);
+    fn update(&mut self, mouse: &MouseState);
+    fn render(&mut self, ui: &mut Ui);
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
