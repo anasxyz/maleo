@@ -14,11 +14,7 @@ pub struct ShapeRenderer {
     vertices: Vec<Vertex>,
     screen_width: f32,
     screen_height: f32,
-    
-    // pre allocate for common sizes
     vertex_capacity: usize,
-    
-    // cache ndc transform values
     ndc_scale_x: f32,
     ndc_scale_y: f32,
 }
@@ -35,7 +31,8 @@ impl ShapeRenderer {
             layout: None,
             vertex: wgpu::VertexState {
                 module: &vertex_shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::VertexStepMode::Vertex,
@@ -55,7 +52,8 @@ impl ShapeRenderer {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &vertex_shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -78,9 +76,9 @@ impl ShapeRenderer {
                 alpha_to_coverage_enabled: false,
             },
             multiview: None,
+            cache: None,
         });
 
-        // start with large buffer to minimise reallocations
         let vertex_capacity = 4096;
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Shape Vertex Buffer"),
@@ -106,11 +104,9 @@ impl ShapeRenderer {
 
     #[inline(always)]
     pub fn clear(&mut self) {
-        // don't deallocate, just reset length
         self.vertices.clear();
     }
 
-    /// optimized ndc conversion using cached scale values
     #[inline(always)]
     fn to_ndc(&self, x: f32, y: f32) -> [f32; 2] {
         [
@@ -119,17 +115,14 @@ impl ShapeRenderer {
         ]
     }
 
-    /// push 6 vertices for quad in one go
     #[inline(always)]
     fn push_quad(&mut self, p1: [f32; 2], p2: [f32; 2], p3: [f32; 2], p4: [f32; 2], color: [f32; 4]) {
-        // reserve space upfront to avoid multiple allocations
         self.vertices.reserve(6);
         
         unsafe {
             let len = self.vertices.len();
             let ptr = self.vertices.as_mut_ptr().add(len);
             
-            // write directly to memory, bypassing bounds checks
             ptr.write(Vertex { position: p1, color });
             ptr.add(1).write(Vertex { position: p2, color });
             ptr.add(2).write(Vertex { position: p3, color });
@@ -141,9 +134,7 @@ impl ShapeRenderer {
         }
     }
 
-    /// rectangle drawing
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: [f32; 4], outline_color: [f32; 4], outline_thickness: f32) {
-        // draw fill
         let p1 = self.to_ndc(x, y);
         let p2 = self.to_ndc(x + w, y);
         let p3 = self.to_ndc(x, y + h);
@@ -151,17 +142,14 @@ impl ShapeRenderer {
         
         self.push_quad(p1, p2, p3, p4, color);
 
-        // draw outline if thickness > 0
         if outline_thickness > 0.0 {
             let half = outline_thickness * 0.5;
             self.rect_outline_fast(x, y, w, h, outline_color, half);
         }
     }
 
-    /// outline with minimal coordinate conversions
     #[inline]
     fn rect_outline_fast(&mut self, x: f32, y: f32, w: f32, h: f32, color: [f32; 4], half: f32) {
-        // top edge
         self.push_quad(
             self.to_ndc(x - half, y - half),
             self.to_ndc(x + w + half, y - half),
@@ -170,7 +158,6 @@ impl ShapeRenderer {
             color
         );
 
-        // bottom edge
         self.push_quad(
             self.to_ndc(x - half, y + h - half),
             self.to_ndc(x + w + half, y + h - half),
@@ -179,7 +166,6 @@ impl ShapeRenderer {
             color
         );
 
-        // left edge
         self.push_quad(
             self.to_ndc(x - half, y + half),
             self.to_ndc(x + half, y + half),
@@ -188,7 +174,6 @@ impl ShapeRenderer {
             color
         );
 
-        // right edge
         self.push_quad(
             self.to_ndc(x + w - half, y + half),
             self.to_ndc(x + w + half, y + half),
@@ -203,16 +188,13 @@ impl ShapeRenderer {
         self.rect(x, y, w, h, color, outline_color, outline_thickness);
     }
 
-    /// circle with pre computed trig values
     pub fn circle(&mut self, cx: f32, cy: f32, radius: f32, color: [f32; 4], outline_color: [f32; 4], outline_thickness: f32) {
         const SEGMENTS: usize = 32;
         
-        // pre allocate exact space needed
         self.vertices.reserve(SEGMENTS * 3);
         
         let center = self.to_ndc(cx, cy);
         
-        // use lookup table for sin/cos
         use std::sync::LazyLock;
         static CIRCLE_LUT: LazyLock<[(f32, f32); 33]> = LazyLock::new(|| {
             let mut lut = [(0.0, 0.0); 33];
@@ -240,7 +222,6 @@ impl ShapeRenderer {
             }
         }
 
-        // draw outline
         if outline_thickness > 0.0 {
             self.circle_outline_fast(cx, cy, radius, outline_color, outline_thickness);
         }
@@ -286,18 +267,15 @@ impl ShapeRenderer {
     pub fn rounded_rect(&mut self, x: f32, y: f32, w: f32, h: f32, radius: f32, color: [f32; 4], outline_color: [f32; 4], outline_thickness: f32) {
         let radius = radius.min(w * 0.5).min(h * 0.5);
         
-        // draw fill rectangles
         self.rect(x + radius, y, w - radius * 2.0, h, color, [0.0; 4], 0.0);
         self.rect(x, y + radius, radius, h - radius * 2.0, color, [0.0; 4], 0.0);
         self.rect(x + w - radius, y + radius, radius, h - radius * 2.0, color, [0.0; 4], 0.0);
         
-        // draw corner circles
         self.quarter_circle_fast(x + radius, y + radius, radius, color, 2);
         self.quarter_circle_fast(x + w - radius, y + radius, radius, color, 3);
         self.quarter_circle_fast(x + w - radius, y + h - radius, radius, color, 0);
         self.quarter_circle_fast(x + radius, y + h - radius, radius, color, 1);
 
-        // Draw outline
         if outline_thickness > 0.0 {
             self.rounded_rect_outline_fast(x, y, w, h, radius, outline_color, outline_thickness);
         }
@@ -333,13 +311,11 @@ impl ShapeRenderer {
     fn rounded_rect_outline_fast(&mut self, x: f32, y: f32, w: f32, h: f32, radius: f32, color: [f32; 4], thickness: f32) {
         let half = thickness * 0.5;
         
-        // edges
         self.rect(x + radius, y - half, w - radius * 2.0, thickness, color, [0.0; 4], 0.0);
         self.rect(x + radius, y + h - half, w - radius * 2.0, thickness, color, [0.0; 4], 0.0);
         self.rect(x - half, y + radius, thickness, h - radius * 2.0, color, [0.0; 4], 0.0);
         self.rect(x + w - half, y + radius, thickness, h - radius * 2.0, color, [0.0; 4], 0.0);
         
-        // corner outlines
         self.quarter_circle_outline_fast(x + radius, y + radius, radius, color, thickness, 2);
         self.quarter_circle_outline_fast(x + w - radius, y + radius, radius, color, thickness, 3);
         self.quarter_circle_outline_fast(x + w - radius, y + h - radius, radius, color, thickness, 0);
@@ -400,10 +376,8 @@ impl ShapeRenderer {
             self.vertex_capacity = (new_size / mem::size_of::<Vertex>() as u64) as usize;
         }
         
-        // write buffer once
         queue.write_buffer(&self.vertex_buffer, 0, vertex_data);
 
-        // single draw call for all shapes
         pass.set_pipeline(&self.pipeline);
         pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         pass.draw(0..self.vertices.len() as u32, 0..1);
