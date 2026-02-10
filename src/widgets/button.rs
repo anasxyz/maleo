@@ -1,5 +1,6 @@
 use std::any::Any;
 use crate::{
+    FontId,
     Ui,
     widgets::{Rect, Widget},
 };
@@ -8,8 +9,9 @@ pub struct ButtonWidget {
     pub id: usize,
     pub bounds: Rect,
     pub text: String,
-    pub font_size: f32,
+    pub font: Option<FontId>,
     pub color: [f32; 4],
+    pub auto_size: bool,
 }
 
 impl ButtonWidget {
@@ -17,14 +19,10 @@ impl ButtonWidget {
         Self {
             id,
             text: text.to_string(),
-            font_size: 16.0,
-            bounds: Rect {
-                x: 0.0,
-                y: 0.0,
-                w: 100.0,
-                h: 40.0,
-            },
+            font: None,
+            bounds: Rect { x: 0.0, y: 0.0, w: 100.0, h: 40.0 },
             color: [0.0; 4],
+            auto_size: false,
         }
     }
 
@@ -35,13 +33,19 @@ impl ButtonWidget {
     }
 
     pub fn size(&mut self, w: f32, h: f32) -> &mut Self {
+        self.auto_size = false;
         self.bounds.w = w;
         self.bounds.h = h;
         self
     }
 
-    pub fn font_size(&mut self, font_size: f32) -> &mut Self {
-        self.font_size = font_size;
+    pub fn font(&mut self, font_id: FontId) -> &mut Self {
+        self.font = Some(font_id);
+        self
+    }
+
+    pub fn auto_size(&mut self) -> &mut Self {
+        self.auto_size = true;
         self
     }
 
@@ -65,12 +69,29 @@ impl Widget for ButtonWidget {
     }
 
     fn render(&self, ui: &mut Ui) {
-        let bounds = self.bounds;
-
-        ui.rect(
-            bounds.x, bounds.y, bounds.w, bounds.h, self.color, [0.0; 4], 0.0,
+        let font_id = self.font.expect(
+            "ButtonWidget has no font set — call .font(font_id) before rendering"
         );
-        ui.text(self.text.as_str(), self.font_size, bounds.x, bounds.y);
+
+        let padding = ui.fonts.default_padding;
+        let (text_w, text_h) = ui.fonts.measure(&self.text, font_id);
+
+        let bounds = if self.auto_size {
+            Rect {
+                x: self.bounds.x,
+                y: self.bounds.y,
+                w: text_w + padding * 2.0,
+                h: text_h + padding * 2.0,
+            }
+        } else {
+            self.bounds
+        };
+
+        ui.rect(bounds.x, bounds.y, bounds.w, bounds.h, self.color, [0.0; 4], 0.0);
+
+        let text_x = bounds.x + (bounds.w - text_w) / 2.0;
+        let text_y = bounds.y + (bounds.h - text_h) / 2.0;
+        ui.text(&self.text, font_id, text_x, text_y);
     }
 
     fn as_any(&self) -> &dyn Any {

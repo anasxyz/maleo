@@ -7,9 +7,8 @@ use winit::{
 };
 
 use crate::widgets::WidgetManager;
-use crate::{GpuContext, InputState, MouseState, ShapeRenderer, TextRenderer, Ui};
+use crate::{Fonts, GpuContext, InputState, MouseState, ShapeRenderer, TextRenderer, Ui};
 
-/// main application
 pub struct App {
     event_loop: Option<EventLoop<()>>,
     window: Arc<Window>,
@@ -18,7 +17,6 @@ pub struct App {
 }
 
 impl App {
-    /// create a new application
     pub fn new(title: &str, width: u32, height: u32) -> Self {
         pollster::block_on(Self::new_async(title, width, height))
     }
@@ -44,7 +42,6 @@ impl App {
         }
     }
 
-    /// get window size in logical coordinates
     #[inline(always)]
     fn logical_size(&self) -> (f32, f32) {
         (
@@ -53,17 +50,18 @@ impl App {
         )
     }
 
-    /// run the application with a widget manager and user update function
-    pub fn run<F>(mut self, mut widgets: WidgetManager, mut update_fn: F)
+    /// Run the application.
+    /// `fonts` is created by the user upfront and passed in here — it is not
+    /// visible inside the update closure.
+    pub fn run<F>(mut self, mut fonts: Fonts, mut widgets: WidgetManager, mut update_fn: F)
     where
         F: FnMut(&mut WidgetManager, &MouseState, &InputState) + 'static,
     {
         let (width, height) = self.logical_size();
-        let mut ui = Ui::new(
-            TextRenderer::new(&self.gpu.device, &self.gpu.queue, self.gpu.format),
-            ShapeRenderer::new(&self.gpu.device, self.gpu.format, width, height),
-        );
-        ui.text_renderer.resize(width, height, self.scale_factor);
+
+        let mut text_renderer = TextRenderer::new(&self.gpu.device, &self.gpu.queue, self.gpu.format);
+        let mut shape_renderer = ShapeRenderer::new(&self.gpu.device, self.gpu.format, width, height);
+        text_renderer.resize(width, height, self.scale_factor);
 
         let mut mouse = MouseState::default();
         let mut input = InputState::default();
@@ -96,13 +94,21 @@ impl App {
                             self.window.request_redraw();
                         }
                         WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                            self.on_scale_change(&mut ui, scale_factor);
+                            self.on_scale_change(&mut text_renderer, &mut shape_renderer, scale_factor);
                         }
                         WindowEvent::Resized(new_size) => {
-                            self.on_resize(&mut ui, new_size);
+                            self.on_resize(&mut text_renderer, &mut shape_renderer, new_size);
                         }
                         WindowEvent::RedrawRequested => {
-                            self.on_redraw(&mut ui, &mut widgets, &mut mouse, &mut input, &mut update_fn);
+                            self.on_redraw(
+                                &mut text_renderer,
+                                &mut shape_renderer,
+                                &mut fonts,
+                                &mut widgets,
+                                &mut mouse,
+                                &mut input,
+                                &mut update_fn,
+                            );
                         }
                         WindowEvent::CloseRequested => {
                             target.exit();
@@ -128,32 +134,39 @@ impl App {
         });
     }
 
-    fn on_scale_change(&mut self, ui: &mut Ui, scale_factor: f64) {
+    fn on_scale_change(
+        &mut self,
+        text_renderer: &mut TextRenderer,
+        shape_renderer: &mut ShapeRenderer,
+        scale_factor: f64,
+    ) {
         self.scale_factor = scale_factor;
-
         let physical_size = self.window.inner_size();
         self.gpu.resize(physical_size.width, physical_size.height);
-
         let (width, height) = self.logical_size();
-        ui.shape_renderer.resize(width, height);
-        ui.text_renderer.resize(width, height, self.scale_factor);
-
+        shape_renderer.resize(width, height);
+        text_renderer.resize(width, height, self.scale_factor);
         self.window.request_redraw();
     }
 
-    fn on_resize(&mut self, ui: &mut Ui, new_size: winit::dpi::PhysicalSize<u32>) {
+    fn on_resize(
+        &mut self,
+        text_renderer: &mut TextRenderer,
+        shape_renderer: &mut ShapeRenderer,
+        new_size: winit::dpi::PhysicalSize<u32>,
+    ) {
         self.gpu.resize(new_size.width, new_size.height);
-
         let (width, height) = self.logical_size();
-        ui.shape_renderer.resize(width, height);
-        ui.text_renderer.resize(width, height, self.scale_factor);
-
+        shape_renderer.resize(width, height);
+        text_renderer.resize(width, height, self.scale_factor);
         self.window.request_redraw();
     }
 
     fn on_redraw<F>(
         &mut self,
-        ui: &mut Ui,
+        text_renderer: &mut TextRenderer,
+        shape_renderer: &mut ShapeRenderer,
+        fonts: &mut Fonts,
         widgets: &mut WidgetManager,
         mouse: &mut MouseState,
         input: &mut InputState,
@@ -161,13 +174,15 @@ impl App {
     ) where
         F: FnMut(&mut WidgetManager, &MouseState, &InputState),
     {
-        ui.shape_renderer.clear();
-        ui.text_renderer.clear();
+        shape_renderer.clear();
+        text_renderer.clear();
+
+        update_fn(widgets, mouse, input);
 
         println!("redrawing");
 
-        update_fn(widgets, mouse, input);
-        widgets.render_all(ui);
+        let mut ui = Ui::new(text_renderer, shape_renderer, fonts);
+        widgets.render_all(&mut ui);
 
         let frame = match self.gpu.begin_frame() {
             Ok(frame) => frame,
@@ -193,10 +208,9 @@ impl App {
             });
 
             let (width, height) = self.logical_size();
-
-            ui.shape_renderer
-                .render(&self.gpu.device, &self.gpu.queue, &mut pass);
-            ui.text_renderer.render(
+            shape_renderer.render(&self.gpu.device, &self.gpu.queue, &mut pass);
+            text_renderer.render(
+                &mut fonts.font_system,
                 width,
                 height,
                 self.scale_factor,

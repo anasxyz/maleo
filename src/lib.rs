@@ -2,7 +2,6 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 #![allow(unused_mut)]
-#![allow(unused_imports)]
 
 mod render {
     pub mod gpu;
@@ -15,12 +14,14 @@ pub use render::shape_renderer::ShapeRenderer;
 pub use render::text_renderer::TextRenderer;
 
 mod app;
+mod fonts;
 mod mouse;
 mod input;
 mod ui;
 pub mod widgets;
 
 pub use app::App;
+pub use fonts::{FontId, Fonts};
 pub use mouse::MouseState;
 pub use input::InputState;
 pub use ui::Ui;
