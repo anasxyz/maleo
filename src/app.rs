@@ -252,6 +252,8 @@ impl<T: RentexApp> ApplicationHandler for WinitHandler<T> {
                         ctx.input.keys_pressed.remove(&key);
                     }
                 }
+                let mouse_snap = ctx.mouse;
+                ctx.widgets.update_all(&mouse_snap);
                 self.app.update(ctx);
                 if ctx.widgets.take_dirty() {
                     ws.window.request_redraw();
