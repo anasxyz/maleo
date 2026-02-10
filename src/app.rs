@@ -76,7 +76,7 @@ impl App {
                         WindowEvent::CursorMoved { position, .. } => {
                             mouse.x = (position.x / self.scale_factor) as f32;
                             mouse.y = (position.y / self.scale_factor) as f32;
-                            self.window.request_redraw();
+                            // self.window.request_redraw();
                         }
                         WindowEvent::MouseInput { state, button, .. } => {
                             match button {

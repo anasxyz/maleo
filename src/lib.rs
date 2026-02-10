@@ -17,6 +17,7 @@ pub use render::text_renderer::TextRenderer;
 mod app;
 mod mouse;
 mod ui;
+pub mod widgets;
 
 pub use app::App;
 pub use mouse::MouseState;
