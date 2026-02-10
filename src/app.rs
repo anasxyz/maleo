@@ -8,9 +8,13 @@ use winit::{
 
 use crate::{Ctx, Fonts, GpuContext, ShapeRenderer, TextRenderer, Drawer};
 
+/// Implement this trait to define your application.
 pub trait RentexApp: 'static {
+    /// Called once at startup. Create and configure all your widgets here.
     fn setup(&mut self, ctx: &mut Ctx);
 
+    /// Called on every input event where something changed.
+    /// Read widget state and mutate your app state here.
     fn update(&mut self, ctx: &mut Ctx);
 }
 
@@ -77,6 +81,8 @@ impl App {
                             ctx.mouse.x = new_x;
                             ctx.mouse.y = new_y;
 
+                            // snapshot mouse so we can pass it to update_all
+                            // while ctx is still available for app.update
                             let mouse_snap = ctx.mouse;
                             let widget_dirty = ctx.widgets.update_all(&mouse_snap);
                             app.update(&mut ctx);
@@ -237,6 +243,10 @@ impl App {
                 &mut pass,
             );
         }
+
+        // trim atlas after pass is dropped — frees unused glyph cache
+        println!("about to trim");
+        text_renderer.trim_atlas();
 
         finisher.present(encoder, &self.gpu.queue);
     }

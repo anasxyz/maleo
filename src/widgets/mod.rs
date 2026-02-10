@@ -3,9 +3,11 @@ use std::marker::PhantomData;
 use crate::{Drawer, MouseState};
 
 mod button;
+mod slider;
 mod manager;
 
 pub use button::ButtonWidget;
+pub use slider::SliderWidget;
 pub use manager::WidgetManager;
 
 #[derive(Debug, Clone, Copy, Default)]

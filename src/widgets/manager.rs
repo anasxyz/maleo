@@ -1,4 +1,4 @@
-use crate::{Drawer, MouseState, widgets::{ButtonWidget, Widget, WidgetHandle}};
+use crate::{Drawer, MouseState, widgets::{ButtonWidget, SliderWidget, Widget, WidgetHandle}};
 
 pub struct WidgetManager {
     widgets: Vec<Box<dyn Widget>>,
@@ -20,6 +20,13 @@ impl WidgetManager {
     pub fn button(&mut self, text: &str) -> WidgetHandle<ButtonWidget> {
         let id = self.alloc_id();
         self.widgets.push(Box::new(ButtonWidget::new(id, text)));
+        self.dirty = true;
+        WidgetHandle::new(id)
+    }
+
+    pub fn slider(&mut self) -> WidgetHandle<SliderWidget> {
+        let id = self.alloc_id();
+        self.widgets.push(Box::new(SliderWidget::new(id)));
         self.dirty = true;
         WidgetHandle::new(id)
     }
@@ -64,6 +71,7 @@ impl WidgetManager {
                 || mouse.left_just_released
                 || mouse.right_just_pressed
                 || mouse.right_just_released
+                || mouse.left_pressed // covers dragging
             {
                 changed = true;
             }

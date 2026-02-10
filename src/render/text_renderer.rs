@@ -4,12 +4,25 @@ use glyphon::{
 };
 use wgpu;
 
+struct TextEntry {
+    buffer: Buffer,
+    x: f32,
+    y: f32,
+    scale: f32,
+    // track what's currently in the buffer so we only re-shape on change
+    text: String,
+    family: String,
+    size: f32,
+}
+
 pub struct TextRenderer {
     swash_cache: SwashCache,
     atlas: TextAtlas,
     renderer: GlyphonRenderer,
-    // (buffer, x, y, scale)
-    text_buffers: Vec<(Buffer, f32, f32, f32)>,
+    // persistent pool — reused across frames
+    entries: Vec<TextEntry>,
+    // how many entries are active this frame
+    active: usize,
     screen_width: f32,
     screen_height: f32,
     scale_factor: f64,
@@ -34,7 +47,8 @@ impl TextRenderer {
             swash_cache,
             atlas,
             renderer,
-            text_buffers: Vec::new(),
+            entries: Vec::new(),
+            active: 0,
             screen_width: 800.0,
             screen_height: 600.0,
             scale_factor: 1.0,
@@ -58,22 +72,62 @@ impl TextRenderer {
     ) {
         let scale = self.scale_factor as f32;
         let line_height = size * 1.4;
+        let idx = self.active;
+        self.active += 1;
 
-        let mut buffer = Buffer::new(
-            font_system,
-            Metrics::new(size * scale, line_height * scale),
-        );
+        if idx < self.entries.len() {
+            // reuse existing entry — only re-shape if content changed
+            let entry = &mut self.entries[idx];
+            entry.x = x;
+            entry.y = y;
+            entry.scale = scale;
 
-        buffer.set_size(font_system, self.screen_width - x, self.screen_height - y);
-        buffer.set_text(
-            font_system,
-            text,
-            Attrs::new().family(Family::Name(family.as_str())),
-            Shaping::Advanced,
-        );
-        buffer.shape_until_scroll(font_system);
+            let content_changed = entry.text != text
+                || entry.family != family
+                || entry.size != size;
 
-        self.text_buffers.push((buffer, x, y, scale));
+            if content_changed {
+                entry.text = text.to_string();
+                entry.family = family.clone();
+                entry.size = size;
+                entry.buffer.set_metrics(
+                    font_system,
+                    Metrics::new(size * scale, line_height * scale),
+                );
+                entry.buffer.set_size(font_system, self.screen_width - x, self.screen_height - y);
+                entry.buffer.set_text(
+                    font_system,
+                    text,
+                    Attrs::new().family(Family::Name(family.as_str())),
+                    Shaping::Advanced,
+                );
+                entry.buffer.shape_until_scroll(font_system);
+            }
+        } else {
+            // pool exhausted — allocate a new entry
+            let mut buffer = Buffer::new(
+                font_system,
+                Metrics::new(size * scale, line_height * scale),
+            );
+            buffer.set_size(font_system, self.screen_width - x, self.screen_height - y);
+            buffer.set_text(
+                font_system,
+                text,
+                Attrs::new().family(Family::Name(family.as_str())),
+                Shaping::Advanced,
+            );
+            buffer.shape_until_scroll(font_system);
+
+            self.entries.push(TextEntry {
+                buffer,
+                x,
+                y,
+                scale,
+                text: text.to_string(),
+                family,
+                size,
+            });
+        }
     }
 
     pub fn render<'pass>(
@@ -86,19 +140,19 @@ impl TextRenderer {
         queue: &wgpu::Queue,
         pass: &mut wgpu::RenderPass<'pass>,
     ) {
-        if self.text_buffers.is_empty() {
+        if self.active == 0 {
             return;
         }
 
         let physical_width = (screen_width * scale_factor as f32) as u32;
         let physical_height = (screen_height * scale_factor as f32) as u32;
 
-        let text_areas: Vec<TextArea> = self.text_buffers
+        let text_areas: Vec<TextArea> = self.entries[..self.active]
             .iter()
-            .map(|(buffer, x, y, scale)| TextArea {
-                buffer,
-                left: x * scale,
-                top: y * scale,
+            .map(|entry| TextArea {
+                buffer: &entry.buffer,
+                left: entry.x * entry.scale,
+                top: entry.y * entry.scale,
                 scale: 1.0,
                 bounds: glyphon::TextBounds {
                     left: 0,
@@ -125,7 +179,15 @@ impl TextRenderer {
         self.renderer.render(&self.atlas, pass).unwrap();
     }
 
+    /// Trim the glyph atlas — call this AFTER the render pass has ended.
+    /// Evicts glyphs not used in the last frame, keeping memory flat.
+    pub fn trim_atlas(&mut self) {
+        self.atlas.trim();
+        println!("trim called, entries: {}, active: {}", self.entries.len(), self.active);
+    }
+
+    /// Reset active count — entries stay allocated in the pool.
     pub fn clear(&mut self) {
-        self.text_buffers.clear();
+        self.active = 0;
     }
 }
