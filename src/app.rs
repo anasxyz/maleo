@@ -50,9 +50,6 @@ impl App {
         )
     }
 
-    /// Run the application.
-    /// `fonts` is created by the user upfront and passed in here — it is not
-    /// visible inside the update closure.
     pub fn run<F>(mut self, mut fonts: Fonts, mut widgets: WidgetManager, mut update_fn: F)
     where
         F: FnMut(&mut WidgetManager, &MouseState, &InputState) + 'static,
@@ -91,27 +88,12 @@ impl App {
                                 }
                                 _ => {}
                             }
-                            self.window.request_redraw();
-                        }
-                        WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                            self.on_scale_change(&mut text_renderer, &mut shape_renderer, scale_factor);
-                        }
-                        WindowEvent::Resized(new_size) => {
-                            self.on_resize(&mut text_renderer, &mut shape_renderer, new_size);
-                        }
-                        WindowEvent::RedrawRequested => {
-                            self.on_redraw(
-                                &mut text_renderer,
-                                &mut shape_renderer,
-                                &mut fonts,
-                                &mut widgets,
-                                &mut mouse,
-                                &mut input,
-                                &mut update_fn,
-                            );
-                        }
-                        WindowEvent::CloseRequested => {
-                            target.exit();
+                            update_fn(&mut widgets, &mouse, &input);
+                            if widgets.take_dirty() {
+                                self.window.request_redraw();
+                            }
+                            input.keys_just_pressed.clear();
+                            input.keys_just_released.clear();
                         }
                         WindowEvent::KeyboardInput { event, .. } => {
                             let pressed = event.state == ElementState::Pressed;
@@ -124,7 +106,29 @@ impl App {
                                     input.keys_pressed.remove(&key);
                                 }
                             }
-                            self.window.request_redraw();
+                            update_fn(&mut widgets, &mouse, &input);
+                            if widgets.take_dirty() {
+                                self.window.request_redraw();
+                            }
+                            input.keys_just_pressed.clear();
+                            input.keys_just_released.clear();
+                        }
+                        WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                            self.on_scale_change(&mut text_renderer, &mut shape_renderer, scale_factor);
+                        }
+                        WindowEvent::Resized(new_size) => {
+                            self.on_resize(&mut text_renderer, &mut shape_renderer, new_size);
+                        }
+                        WindowEvent::RedrawRequested => {
+                            self.render(
+                                &mut text_renderer,
+                                &mut shape_renderer,
+                                &mut fonts,
+                                &mut widgets,
+                            );
+                        }
+                        WindowEvent::CloseRequested => {
+                            target.exit();
                         }
                         _ => {}
                     }
@@ -162,24 +166,15 @@ impl App {
         self.window.request_redraw();
     }
 
-    fn on_redraw<F>(
+    fn render(
         &mut self,
         text_renderer: &mut TextRenderer,
         shape_renderer: &mut ShapeRenderer,
         fonts: &mut Fonts,
         widgets: &mut WidgetManager,
-        mouse: &mut MouseState,
-        input: &mut InputState,
-        update_fn: &mut F,
-    ) where
-        F: FnMut(&mut WidgetManager, &MouseState, &InputState),
-    {
+    ) {
         shape_renderer.clear();
         text_renderer.clear();
-
-        update_fn(widgets, mouse, input);
-
-        println!("redrawing");
 
         let mut ui = Ui::new(text_renderer, shape_renderer, fonts);
         widgets.render_all(&mut ui);
@@ -221,8 +216,5 @@ impl App {
         }
 
         finisher.present(encoder, &self.gpu.queue);
-
-        input.keys_just_pressed.clear();
-        input.keys_just_released.clear();
     }
 }

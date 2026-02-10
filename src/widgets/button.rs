@@ -6,12 +6,12 @@ use crate::{
 };
 
 pub struct ButtonWidget {
-    pub id: usize,
-    pub bounds: Rect,
-    pub text: String,
-    pub font: Option<FontId>,
-    pub color: [f32; 4],
-    pub auto_size: bool,
+    id: usize,
+    bounds: Rect,
+    text: String,
+    font: Option<FontId>,
+    color: [f32; 4],
+    auto_size: bool,
 }
 
 impl ButtonWidget {
@@ -46,6 +46,11 @@ impl ButtonWidget {
 
     pub fn auto_size(&mut self) -> &mut Self {
         self.auto_size = true;
+        self
+    }
+
+    pub fn text(&mut self, text: impl Into<String>) -> &mut Self {
+        self.text = text.into();
         self
     }
 

@@ -1,4 +1,4 @@
-use rentex::{App, FontId, Fonts};
+use rentex::{App, Fonts};
 use rentex::widgets::WidgetManager;
 use winit::keyboard::KeyCode;
 
@@ -21,7 +21,7 @@ fn main() {
     app.run(fonts, widgets, move |widgets, mouse, input| {
         if input.just_pressed(KeyCode::Space) {
             counter += 1;
-            widgets.get_mut(btn).text = format!("Clicked: {}", counter);
+            widgets.get_mut(btn).text(format!("Clicked: {}", counter));
         }
     });
 }

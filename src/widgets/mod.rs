@@ -7,7 +7,7 @@ mod button;
 mod manager;
 
 pub use button::ButtonWidget;
-pub use manager::WidgetManager;
+pub use manager::{WidgetManager, WidgetMut};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Rect {
@@ -34,16 +34,11 @@ pub struct WidgetHandle<T: Widget> {
 
 impl<T: Widget> Copy for WidgetHandle<T> {}
 impl<T: Widget> Clone for WidgetHandle<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
+    fn clone(&self) -> Self { *self }
 }
 
 impl<T: Widget> WidgetHandle<T> {
     pub(crate) fn new(id: usize) -> Self {
-        Self {
-            id,
-            _marker: PhantomData,
-        }
+        Self { id, _marker: PhantomData }
     }
 }
