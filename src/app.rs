@@ -2,11 +2,12 @@ use std::sync::Arc;
 use winit::{
     event::{ElementState, Event, MouseButton, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
+    keyboard::PhysicalKey,
     window::{Window, WindowBuilder},
 };
 
-use crate::{GpuContext, MouseState, InputState, ShapeRenderer, TextRenderer, Ui};
 use crate::widgets::WidgetManager;
+use crate::{GpuContext, InputState, MouseState, ShapeRenderer, TextRenderer, Ui};
 
 /// main application
 pub struct App {
@@ -55,7 +56,7 @@ impl App {
     /// run the application with a widget manager and user update function
     pub fn run<F>(mut self, mut widgets: WidgetManager, mut update_fn: F)
     where
-        F: FnMut(&mut WidgetManager, &MouseState) + 'static,
+        F: FnMut(&mut WidgetManager, &MouseState, &InputState) + 'static,
     {
         let (width, height) = self.logical_size();
         let mut ui = Ui::new(
@@ -65,6 +66,8 @@ impl App {
         ui.text_renderer.resize(width, height, self.scale_factor);
 
         let mut mouse = MouseState::default();
+        let mut input = InputState::default();
+
         let event_loop = self.event_loop.take().unwrap();
 
         let _ = event_loop.run(move |event, target| {
@@ -99,10 +102,23 @@ impl App {
                             self.on_resize(&mut ui, new_size);
                         }
                         WindowEvent::RedrawRequested => {
-                            self.on_redraw(&mut ui, &mut widgets, &mut mouse, &mut update_fn);
+                            self.on_redraw(&mut ui, &mut widgets, &mut mouse, &mut input, &mut update_fn);
                         }
                         WindowEvent::CloseRequested => {
                             target.exit();
+                        }
+                        WindowEvent::KeyboardInput { event, .. } => {
+                            let pressed = event.state == ElementState::Pressed;
+                            if let PhysicalKey::Code(key) = event.physical_key {
+                                if pressed {
+                                    input.keys_just_pressed.insert(key);
+                                    input.keys_pressed.insert(key);
+                                } else {
+                                    input.keys_just_released.insert(key);
+                                    input.keys_pressed.remove(&key);
+                                }
+                            }
+                            self.window.request_redraw();
                         }
                         _ => {}
                     }
@@ -140,17 +156,17 @@ impl App {
         ui: &mut Ui,
         widgets: &mut WidgetManager,
         mouse: &mut MouseState,
+        input: &mut InputState,
         update_fn: &mut F,
-    )
-    where
-        F: FnMut(&mut WidgetManager, &MouseState),
+    ) where
+        F: FnMut(&mut WidgetManager, &MouseState, &InputState),
     {
         ui.shape_renderer.clear();
         ui.text_renderer.clear();
 
         println!("redrawing");
 
-        update_fn(widgets, mouse);
+        update_fn(widgets, mouse, input);
         widgets.render_all(ui);
 
         let frame = match self.gpu.begin_frame() {
@@ -191,5 +207,8 @@ impl App {
         }
 
         finisher.present(encoder, &self.gpu.queue);
+
+        input.keys_just_pressed.clear();
+        input.keys_just_released.clear();
     }
 }
