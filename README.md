@@ -1,5 +1,5 @@
-<h1 align="center">maleo</h1> 
-<p align="center">gpu-accelerated cross platform UI library built on wgpu and winit</p> 
+<h1 align="center">Bento</h1> 
+<p align="center">gpu-accelerated cross platform UI framework built on wgpu and winit</p> 
 <p align="center">early days, API will change frequently</p>
 
 

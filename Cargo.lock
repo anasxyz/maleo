@@ -107,6 +107,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
+name = "bento"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "glyphon",
+ "pollster",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -820,17 +831,6 @@ name = "lru"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38"
-
-[[package]]
-name = "maleo"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "glyphon",
- "pollster",
- "wgpu",
- "winit",
-]
 
 [[package]]
 name = "malloc_buf"

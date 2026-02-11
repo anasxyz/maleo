@@ -1,7 +1,7 @@
 #![allow(dead_code, unused)]
 
-use maleo::widgets::{ButtonWidget, SliderWidget, TextInputWidget, WidgetHandle};
-use maleo::{App, Ctx, FontId, Fonts, MaleoApp};
+use bento::widgets::{ButtonWidget, SliderWidget, TextInputWidget, WidgetHandle};
+use bento::{App, Ctx, FontId, Fonts, BentoApp};
 
 struct Demo {
     font: Option<FontId>,
@@ -22,7 +22,7 @@ struct Demo {
     reset_btn:  Option<WidgetHandle<ButtonWidget>>,
 }
 
-impl MaleoApp for Demo {
+impl BentoApp for Demo {
     fn setup(&mut self, ctx: &mut Ctx) {
         let font = ctx.fonts.add("JetBrainsMono Nerd Font", 14.0);
         self.font = Some(font);
@@ -145,7 +145,7 @@ impl MaleoApp for Demo {
 }
 
 fn main() {
-    App::new("maleo", 440, 260).run(
+    App::new("bento", 440, 260).run(
         Fonts::new(),
         Demo {
             font: None,
