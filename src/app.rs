@@ -64,14 +64,11 @@ impl WindowState {
         self.shape_renderer.clear();
         self.text_renderer.clear();
 
-        // first pass: let auto_size widgets compute their bounds
         let mut drawer = Drawer::new(&mut self.text_renderer, &mut self.shape_renderer, &mut ctx.fonts);
         ctx.widgets.render_all(&mut drawer);
 
-        // now layout has correct sizes to work with
         ctx.layout.compute_all(&mut ctx.widgets.widgets);
 
-        // second pass: render at the correct laid-out positions
         self.shape_renderer.clear();
         self.text_renderer.clear();
         let mut drawer = Drawer::new(&mut self.text_renderer, &mut self.shape_renderer, &mut ctx.fonts);
@@ -122,7 +119,6 @@ struct WinitHandler<T: RentexApp> {
     title: String,
     width: u32,
     height: u32,
-    fonts: Option<Fonts>,
     app: T,
     ctx: Option<Ctx>,
     window_state: Option<WindowState>,
@@ -130,12 +126,11 @@ struct WinitHandler<T: RentexApp> {
 }
 
 impl<T: RentexApp> WinitHandler<T> {
-    fn new(title: &str, width: u32, height: u32, fonts: Fonts, app: T) -> Self {
+    fn new(title: &str, width: u32, height: u32, app: T) -> Self {
         Self {
             title: title.to_string(),
             width,
             height,
-            fonts: Some(fonts),
             app,
             ctx: None,
             window_state: None,
@@ -158,7 +153,7 @@ impl<T: RentexApp> ApplicationHandler for WinitHandler<T> {
         let ws = pollster::block_on(WindowState::new(window));
         self.window_state = Some(ws);
 
-        let fonts = self.fonts.take().unwrap();
+        let fonts = Fonts::new();
         let mut ctx = Ctx::new(fonts);
         self.app.setup(&mut ctx);
         ctx.widgets.mark_dirty();
@@ -309,7 +304,7 @@ impl App {
 
     pub fn run<T: RentexApp>(self, fonts: Fonts, app: T) {
         let event_loop = EventLoop::new().unwrap();
-        let mut handler = WinitHandler::new(&self.title, self.width, self.height, fonts, app);
+        let mut handler = WinitHandler::new(&self.title, self.width, self.height, app);
         event_loop.run_app(&mut handler).unwrap();
     }
 }

@@ -10,7 +10,7 @@ struct MyApp {
 
 impl RentexApp for MyApp {
     fn setup(&mut self, ctx: &mut Ctx) {
-        let font = ctx.fonts.add("Arial", 16.0);
+        let font = ctx.fonts.add("JetBrainsMono Nerd Font", 16.0);
 
         let btn = ctx.widgets.button("Click me");
         ctx.widgets
