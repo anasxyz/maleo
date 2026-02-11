@@ -1,4 +1,4 @@
-<h1 align="center">rentex / rntx</h1> 
+<h1 align="center">rui</h1> 
 <p align="center"> gpu-accelerated cross platform GUI library built on wgpu and winit.</p> 
 <p align="center">early days, API will change frequently</p>
 
