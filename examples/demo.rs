@@ -1,7 +1,7 @@
 #![allow(dead_code, unused)]
 
-use rentex::widgets::{ButtonWidget, SliderWidget, TextInputWidget, WidgetHandle};
-use rentex::{App, Ctx, FontId, Fonts, RentexApp};
+use rui::widgets::{ButtonWidget, SliderWidget, TextInputWidget, WidgetHandle};
+use rui::{App, Ctx, FontId, Fonts, RuiApp};
 
 struct Demo {
     font: Option<FontId>,
@@ -22,7 +22,7 @@ struct Demo {
     reset_btn:  Option<WidgetHandle<ButtonWidget>>,
 }
 
-impl RentexApp for Demo {
+impl RuiApp for Demo {
     fn setup(&mut self, ctx: &mut Ctx) {
         let font = ctx.fonts.add("JetBrainsMono Nerd Font", 14.0);
         self.font = Some(font);
@@ -145,7 +145,7 @@ impl RentexApp for Demo {
 }
 
 fn main() {
-    App::new("rentex", 440, 260).run(
+    App::new("rui", 440, 260).run(
         Fonts::new(),
         Demo {
             font: None,

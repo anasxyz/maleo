@@ -22,7 +22,7 @@ mod input;
 mod layout;
 pub mod widgets;
 
-pub use app::{App, RentexApp};
+pub use app::{App, RuiApp};
 pub use ctx::Ctx;
 pub use drawer::Drawer;
 pub use fonts::{FontId, Fonts};
