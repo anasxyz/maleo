@@ -21,7 +21,7 @@ mod input;
 mod color;
 
 pub use app::{App, BentoApp};
-pub use ctx::{Ctx, Rect, Text};
+pub use ctx::{Ctx, Rect, Text, Widget, Container, ContainerDirection};
 pub use fonts::{FontId, Fonts};
 pub use mouse::MouseState;
 pub use input::InputState;

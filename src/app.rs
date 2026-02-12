@@ -7,7 +7,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::{Ctx, Fonts, GpuContext, ShapeRenderer, TextRenderer};
+use crate::{Color, Ctx, Fonts, GpuContext, ShapeRenderer, TextRenderer};
 
 pub trait BentoApp: 'static {
     fn once(&mut self, ctx: &mut Ctx);
@@ -66,32 +66,10 @@ impl WindowState {
         ctx.shape_renderer.clear();
         ctx.text_renderer.clear();
 
-        // draw all stored rects
-        for rect in &ctx.rects {
-            ctx.shape_renderer.rect(
-                rect.x,
-                rect.y,
-                rect.w,
-                rect.h,
-                rect.color.to_array(),
-                rect.outline_color.to_array(),
-                rect.outline_thickness,
-            );
-        }
-
-        // draw all stored texts
-        for text in &ctx.texts {
-            ctx.text_renderer.draw(
-                &mut ctx.fonts.font_system,
-                text.font_family.clone(),
-                text.font_size,
-                &text.text,
-                text.x,
-                text.y,
-            );
-        }
-
         app.update(ctx);
+
+        ctx.layout();
+        ctx.render_widgets();
 
         let frame = match self.gpu.begin_frame() {
             Ok(frame) => frame,
