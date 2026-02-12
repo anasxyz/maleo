@@ -324,10 +324,12 @@ impl<T: BentoApp> ApplicationHandler for WinitHandler<T> {
             } => {
                 let new_inner = ws.window.inner_size();
                 ws.on_scale_change(scale_factor, new_inner, ctx);
+                ctx.mark_dirty();
                 ws.window.request_redraw();
             }
             WindowEvent::Resized(new_size) => {
                 ws.on_resize(new_size, ctx);
+                ctx.mark_dirty();
                 ws.window.request_redraw();
             }
             WindowEvent::RedrawRequested => {
