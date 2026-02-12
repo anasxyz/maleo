@@ -1,7 +1,7 @@
 #![allow(dead_code, unused)]
 use winit::keyboard::KeyCode;
 
-use bento::{App, BentoApp, Color, Ctx, FontId, Fonts, Height, Width};
+use bento::{App, BentoApp, Color, Ctx, FontId, Fonts, Height, Width, Rect, Text, Button};
 
 struct Demo {
     x: f32,
@@ -70,10 +70,10 @@ impl BentoApp for Demo {
             ctx.mark_dirty();
         }
 
-        if ctx.ui.rects[1].visible {
-            ctx.ui.rects[0].x = 0.0;
+        if ctx.ui.exists::<Rect>("rect2") && ctx.ui.get::<Rect>("rect2").unwrap().visible {
+            ctx.ui.get_mut::<Rect>("rect1").unwrap().x = 200.0;
         } else {
-            ctx.ui.rects[0].x = 200.0;
+            ctx.ui.get_mut::<Rect>("rect1").unwrap().x = 0.0;
         }
     }
 }

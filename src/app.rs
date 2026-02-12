@@ -167,6 +167,7 @@ impl<T: BentoApp> ApplicationHandler for WinitHandler<T> {
         ctx.resize(width, height);
 
         self.app.once(&mut ctx);
+        self.app.update(&mut ctx);
         self.ctx = Some(ctx);
         self.setup_done = true;
 

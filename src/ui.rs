@@ -349,6 +349,48 @@ impl Ui {
         false
     }
 
+    pub fn get<T: 'static>(&self, id: &str) -> Option<&T> {
+        let _ = std::any::TypeId::of::<T>();
+        
+        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<Rect>() {
+            self.rects.iter()
+                .find(|r| r.id == id)
+                .map(|r| unsafe { &*(r as *const Rect as *const T) })
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<Text>() {
+            self.texts.iter()
+                .find(|t| t.id == id)
+                .map(|t| unsafe { &*(t as *const Text as *const T) })
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<Button>() {
+            self.buttons.iter()
+                .find(|b| b.id == id)
+                .map(|b| unsafe { &*(b as *const Button as *const T) })
+        } else {
+            None
+        }
+    }
+
+    pub fn get_mut<T: 'static>(&mut self, id: &str) -> Option<&mut T> {
+        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<Rect>() {
+            self.rects.iter_mut()
+                .find(|r| r.id == id)
+                .map(|r| unsafe { &mut *(r as *mut Rect as *mut T) })
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<Text>() {
+            self.texts.iter_mut()
+                .find(|t| t.id == id)
+                .map(|t| unsafe { &mut *(t as *mut Text as *mut T) })
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<Button>() {
+            self.buttons.iter_mut()
+                .find(|b| b.id == id)
+                .map(|b| unsafe { &mut *(b as *mut Button as *mut T) })
+        } else {
+            None
+        }
+    }
+
+    pub fn exists<T: 'static>(&self, id: &str) -> bool {
+        self.get::<T>(id).is_some()
+    }
+
     pub fn resize(&mut self, window_width: f32, window_height: f32) {
         self.window_width = window_width;
         self.window_height = window_height;
