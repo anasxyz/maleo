@@ -7,12 +7,9 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::{Ctx, Fonts, GpuContext, ShapeRenderer, TextRenderer};
+use crate::{Fonts, GpuContext, ShapeRenderer, TextRenderer};
 
-pub trait BentoApp: 'static {
-    fn once(&mut self, ctx: &mut Ctx);
-    fn update(&mut self, ctx: &mut Ctx);
-}
+pub trait BentoApp: 'static {}
 
 struct WindowState {
     gpu: GpuContext,
@@ -39,36 +36,23 @@ impl WindowState {
         )
     }
 
-    fn on_resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, ctx: &mut Ctx) {
+    fn on_resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         self.gpu.resize(new_size.width, new_size.height);
         let (w, h) = self.logical_size();
-        ctx.ui.shape_renderer.resize(w, h);
-        ctx.ui.text_renderer.resize(w, h, self.scale_factor);
-        ctx.resize(w, h);
     }
 
     fn on_scale_change(
         &mut self,
         scale_factor: f64,
         new_inner_size: winit::dpi::PhysicalSize<u32>,
-        ctx: &mut Ctx,
     ) {
         self.scale_factor = scale_factor;
         self.gpu.resize(new_inner_size.width, new_inner_size.height);
         let (w, h) = self.logical_size();
-        ctx.ui.shape_renderer.resize(w, h);
-        ctx.ui.text_renderer.resize(w, h, self.scale_factor);
-        ctx.resize(w, h);
     }
 
-    fn render<T: BentoApp>(&mut self, ctx: &mut Ctx, app: &mut T) {
+    fn render<T: BentoApp>(&mut self, app: &mut T) {
         println!("render");
-        ctx.ui.shape_renderer.clear();
-        ctx.ui.text_renderer.clear();
-
-        ctx.render_all();
-
-        app.update(ctx);
 
         let frame = match self.gpu.begin_frame() {
             Ok(frame) => frame,
@@ -94,21 +78,11 @@ impl WindowState {
             });
 
             let (width, height) = self.logical_size();
-            ctx.ui
-                .shape_renderer
-                .render(&self.gpu.device, &self.gpu.queue, &mut pass);
-            ctx.ui.text_renderer.render(
-                &mut ctx.ui.fonts.font_system,
-                width,
-                height,
-                self.scale_factor,
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut pass,
-            );
+            // text_renderer render function goes here
+            // shape_renderer render function goes here
         }
 
-        ctx.ui.text_renderer.trim_atlas();
+        // text_renderer trim_atlas function goes here
         finisher.present(encoder, &self.gpu.queue);
     }
 }
@@ -118,7 +92,6 @@ struct WinitHandler<T: BentoApp> {
     width: u32,
     height: u32,
     app: T,
-    ctx: Option<Ctx>,
     window_state: Option<WindowState>,
     setup_done: bool,
 }
@@ -130,7 +103,6 @@ impl<T: BentoApp> WinitHandler<T> {
             width,
             height,
             app,
-            ctx: None,
             window_state: None,
             setup_done: false,
         }
@@ -163,12 +135,7 @@ impl<T: BentoApp> ApplicationHandler for WinitHandler<T> {
 
         let mut fonts = Fonts::new();
         fonts.add("default", "Arial", 14.0);
-        let mut ctx = Ctx::new(fonts, text_renderer, shape_renderer);
-        ctx.resize(width, height);
 
-        self.app.once(&mut ctx);
-        self.app.update(&mut ctx);
-        self.ctx = Some(ctx);
         self.setup_done = true;
 
         self.window_state.as_ref().unwrap().window.request_redraw();
@@ -184,10 +151,6 @@ impl<T: BentoApp> ApplicationHandler for WinitHandler<T> {
             Some(ws) => ws,
             None => return,
         };
-        let ctx = match self.ctx.as_mut() {
-            Some(ctx) => ctx,
-            None => return,
-        };
 
         event_loop.set_control_flow(ControlFlow::Wait);
 
@@ -195,136 +158,53 @@ impl<T: BentoApp> ApplicationHandler for WinitHandler<T> {
             WindowEvent::CursorMoved { position, .. } => {
                 let new_x = (position.x / ws.scale_factor) as f32;
                 let new_y = (position.y / ws.scale_factor) as f32;
-                ctx.mouse.dx = new_x - ctx.mouse.x;
-                ctx.mouse.dy = new_y - ctx.mouse.y;
-                ctx.mouse.x = new_x;
-                ctx.mouse.y = new_y;
 
-                let mouse_snap = ctx.mouse;
-
-                ctx.mark_dirty();
-                self.app.update(ctx);
                 ws.window.request_redraw();
-
-                if ctx.exit {
-                    self.window_state = None;
-                    event_loop.exit();
-                    return;
-                }
-                ctx.mouse.dx = 0.0;
-                ctx.mouse.dy = 0.0;
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let pressed = state == ElementState::Pressed;
                 match button {
-                    MouseButton::Left => {
-                        ctx.mouse.left_just_pressed = pressed && !ctx.mouse.left_pressed;
-                        ctx.mouse.left_just_released = !pressed && ctx.mouse.left_pressed;
-                        ctx.mouse.left_pressed = pressed;
-                    }
-                    MouseButton::Right => {
-                        ctx.mouse.right_just_pressed = pressed && !ctx.mouse.right_pressed;
-                        ctx.mouse.right_just_released = !pressed && ctx.mouse.right_pressed;
-                        ctx.mouse.right_pressed = pressed;
-                    }
-                    MouseButton::Middle => {
-                        ctx.mouse.middle_just_pressed = pressed && !ctx.mouse.middle_pressed;
-                        ctx.mouse.middle_just_released = !pressed && ctx.mouse.middle_pressed;
-                        ctx.mouse.middle_pressed = pressed;
-                    }
+                    MouseButton::Left => {}
+                    MouseButton::Right => {}
+                    MouseButton::Middle => {}
                     _ => {}
                 }
-                let mouse_snap = ctx.mouse;
 
-                self.app.update(ctx);
                 ws.window.request_redraw();
-
-                if ctx.exit {
-                    self.window_state = None;
-                    event_loop.exit();
-                    return;
-                }
-                ctx.mouse.left_just_pressed = false;
-                ctx.mouse.left_just_released = false;
-                ctx.mouse.right_just_pressed = false;
-                ctx.mouse.right_just_released = false;
-                ctx.mouse.middle_just_pressed = false;
-                ctx.mouse.middle_just_released = false;
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 match delta {
-                    MouseScrollDelta::LineDelta(x, y) => {
-                        ctx.mouse.scroll_x = x;
-                        ctx.mouse.scroll_y = y;
-                    }
-                    MouseScrollDelta::PixelDelta(pos) => {
-                        ctx.mouse.scroll_x = pos.x as f32;
-                        ctx.mouse.scroll_y = pos.y as f32;
-                    }
+                    MouseScrollDelta::LineDelta(x, y) => {}
+                    MouseScrollDelta::PixelDelta(pos) => {}
                 }
-                let mouse_snap = ctx.mouse;
 
-                self.app.update(ctx);
                 ws.window.request_redraw();
-
-                if ctx.exit {
-                    self.window_state = None;
-                    event_loop.exit();
-                    return;
-                }
-                ctx.mouse.scroll_x = 0.0;
-                ctx.mouse.scroll_y = 0.0;
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 let pressed = event.state == ElementState::Pressed;
                 if let PhysicalKey::Code(key) = event.physical_key {
                     if pressed {
-                        ctx.input.keys_just_pressed.insert(key);
-                        ctx.input.keys_pressed.insert(key);
                     } else {
-                        ctx.input.keys_just_released.insert(key);
-                        ctx.input.keys_pressed.remove(&key);
                     }
                 }
-                let mouse_snap = ctx.mouse;
 
-                self.app.update(ctx);
                 ws.window.request_redraw();
-
-                if ctx.exit {
-                    self.window_state = None;
-                    event_loop.exit();
-                    return;
-                }
-                ctx.input.keys_just_pressed.clear();
-                ctx.input.keys_just_released.clear();
             }
-            WindowEvent::Ime(winit::event::Ime::Commit(text)) => {
-                for c in text.chars() {}
-                if ctx.exit {
-                    self.window_state = None;
-                    event_loop.exit();
-                    return;
-                }
-            }
+            WindowEvent::Ime(winit::event::Ime::Commit(text)) => for c in text.chars() {},
             WindowEvent::ScaleFactorChanged {
                 scale_factor,
                 inner_size_writer: _,
             } => {
                 let new_inner = ws.window.inner_size();
-                ws.on_scale_change(scale_factor, new_inner, ctx);
-                ctx.mark_dirty();
+                ws.on_scale_change(scale_factor, new_inner);
                 ws.window.request_redraw();
             }
             WindowEvent::Resized(new_size) => {
-                ws.on_resize(new_size, ctx);
-                ctx.mark_dirty();
+                ws.on_resize(new_size);
                 ws.window.request_redraw();
             }
             WindowEvent::RedrawRequested => {
-                if ctx.take_dirty() {
-                    ws.render(ctx, &mut self.app);
-                }
+                ws.render(&mut self.app);
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
