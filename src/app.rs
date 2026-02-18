@@ -8,11 +8,11 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::{Ctx, Fonts, GpuContext, InputState, MouseState, ShapeRenderer, TextRenderer};
+use crate::{Element, Fonts, GpuContext, Input, ShapeRenderer, TextRenderer};
 
 pub trait App: 'static + Sized {
     fn new() -> Self;
-    fn update(&mut self, ctx: &mut Ctx);
+    fn update(&mut self, input: &Input) -> Element;
 }
 
 pub fn run<A: App>(title: &str, width: u32, height: u32) {
@@ -29,16 +29,13 @@ struct Runner<A: App> {
     title: String,
     width: u32,
     height: u32,
-
-    // populated after window creation
     window: Option<Arc<Window>>,
     gpu: Option<GpuContext>,
     scale_factor: f64,
     text_renderer: Option<TextRenderer>,
     shape_renderer: Option<ShapeRenderer>,
     fonts: Option<Fonts>,
-    mouse: MouseState,
-    input: InputState,
+    input: Input,
 }
 
 impl<A: App> Runner<A> {
@@ -54,8 +51,7 @@ impl<A: App> Runner<A> {
             text_renderer: None,
             shape_renderer: None,
             fonts: None,
-            mouse: MouseState::default(),
-            input: InputState::default(),
+            input: Input::default(),
         }
     }
 
@@ -88,9 +84,79 @@ impl<A: App> Runner<A> {
         }
     }
 
-    fn render(&mut self) {
-        println!("render");
+    fn draw_element(&mut self, element: &Element, x: f32, y: f32) {
+        let sr = self.shape_renderer.as_mut().unwrap();
+        let tr = self.text_renderer.as_mut().unwrap();
+        let fonts = self.fonts.as_mut().unwrap();
 
+        match element {
+            Element::Rect { w, h, color } => {
+                sr.draw_rect(x, y, *w, *h, color.to_array(), [0.0; 4], 0.0);
+            }
+            Element::Text { content, color } => {
+                let font = fonts.default();
+                let entry = fonts.get(font);
+                let family = entry.family.clone();
+                let size = entry.size;
+                tr.draw(&mut fonts.font_system, family, size, content, x, y, *color);
+            }
+            Element::Row { gap, children } => {
+                let mut cursor_x = x;
+                for child in children {
+                    let size = self.measure(child);
+                    self.draw_element(child, cursor_x, y);
+                    cursor_x += size.0 + gap;
+                }
+            }
+            Element::Column { gap, children } => {
+                let mut cursor_y = y;
+                for child in children {
+                    let size = self.measure(child);
+                    self.draw_element(child, x, cursor_y);
+                    cursor_y += size.1 + gap;
+                }
+            }
+        }
+    }
+
+    fn measure(&mut self, element: &Element) -> (f32, f32) {
+        match element {
+            Element::Rect { w, h, .. } => (*w, *h),
+            Element::Text { content, .. } => {
+                let fonts = self.fonts.as_mut().unwrap();
+                let font = fonts.default();
+                fonts.measure(content, font)
+            }
+            Element::Row { gap, children } => {
+                let mut w = 0.0f32;
+                let mut h = 0.0f32;
+                for (i, child) in children.iter().enumerate() {
+                    let size = self.measure(child);
+                    w += size.0;
+                    h = h.max(size.1);
+                    if i < children.len() - 1 {
+                        w += gap;
+                    }
+                }
+                (w, h)
+            }
+            Element::Column { gap, children } => {
+                let mut w = 0.0f32;
+                let mut h = 0.0f32;
+                for (i, child) in children.iter().enumerate() {
+                    let size = self.measure(child);
+                    w = w.max(size.0);
+                    h += size.1;
+                    if i < children.len() - 1 {
+                        h += gap;
+                    }
+                }
+                (w, h)
+            }
+        }
+    }
+
+    fn render(&mut self) {
         let frame = match self.gpu_mut().begin_frame() {
             Ok(f) => f,
             Err(_) => return,
@@ -99,18 +165,9 @@ impl<A: App> Runner<A> {
         let (mut encoder, finisher, view, msaa_view) = frame.begin();
         let (width, height) = self.logical_size();
 
-        // let user queue draw calls
-        {
-            let tr = self.text_renderer.as_mut().unwrap();
-            let sr = self.shape_renderer.as_mut().unwrap();
-            let fonts = self.fonts.as_mut().unwrap();
+        let tree = self.app.update(&self.input);
+        self.draw_element(&tree, 0.0, 0.0);
 
-            let mut ctx = Ctx::new(&self.mouse, &self.input, fonts, tr, sr, width, height);
-
-            self.app.update(&mut ctx);
-        }
-
-        // submit queued draw calls to the gpu
         {
             let gpu = self.gpu.as_ref().unwrap();
 
@@ -209,29 +266,29 @@ impl<A: App> ApplicationHandler for Runner<A> {
             WindowEvent::CursorMoved { position, .. } => {
                 let x = (position.x / self.scale_factor) as f32;
                 let y = (position.y / self.scale_factor) as f32;
-                self.mouse.dx = x - self.mouse.x;
-                self.mouse.dy = y - self.mouse.y;
-                self.mouse.x = x;
-                self.mouse.y = y;
+                self.input.mouse_dx = x - self.input.mouse_x;
+                self.input.mouse_dy = y - self.input.mouse_y;
+                self.input.mouse_x = x;
+                self.input.mouse_y = y;
                 self.window().request_redraw();
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let pressed = state == ElementState::Pressed;
                 match button {
                     MouseButton::Left => {
-                        self.mouse.left_just_pressed = pressed && !self.mouse.left_pressed;
-                        self.mouse.left_just_released = !pressed && self.mouse.left_pressed;
-                        self.mouse.left_pressed = pressed;
+                        self.input.left_just_pressed = pressed && !self.input.left_pressed;
+                        self.input.left_just_released = !pressed && self.input.left_pressed;
+                        self.input.left_pressed = pressed;
                     }
                     MouseButton::Right => {
-                        self.mouse.right_just_pressed = pressed && !self.mouse.right_pressed;
-                        self.mouse.right_just_released = !pressed && self.mouse.right_pressed;
-                        self.mouse.right_pressed = pressed;
+                        self.input.right_just_pressed = pressed && !self.input.right_pressed;
+                        self.input.right_just_released = !pressed && self.input.right_pressed;
+                        self.input.right_pressed = pressed;
                     }
                     MouseButton::Middle => {
-                        self.mouse.middle_just_pressed = pressed && !self.mouse.middle_pressed;
-                        self.mouse.middle_just_released = !pressed && self.mouse.middle_pressed;
-                        self.mouse.middle_pressed = pressed;
+                        self.input.middle_just_pressed = pressed && !self.input.middle_pressed;
+                        self.input.middle_just_released = !pressed && self.input.middle_pressed;
+                        self.input.middle_pressed = pressed;
                     }
                     _ => {}
                 }
@@ -240,12 +297,12 @@ impl<A: App> ApplicationHandler for Runner<A> {
             WindowEvent::MouseWheel { delta, .. } => {
                 match delta {
                     MouseScrollDelta::LineDelta(x, y) => {
-                        self.mouse.scroll_x = x;
-                        self.mouse.scroll_y = y;
+                        self.input.scroll_x = x;
+                        self.input.scroll_y = y;
                     }
                     MouseScrollDelta::PixelDelta(pos) => {
-                        self.mouse.scroll_x = pos.x as f32;
-                        self.mouse.scroll_y = pos.y as f32;
+                        self.input.scroll_x = pos.x as f32;
+                        self.input.scroll_y = pos.y as f32;
                     }
                 }
                 self.window().request_redraw();
@@ -262,7 +319,7 @@ impl<A: App> ApplicationHandler for Runner<A> {
                 }
                 self.window().request_redraw();
             }
-            WindowEvent::Ime(winit::event::Ime::Commit(text)) => for _c in text.chars() {},
+            WindowEvent::Ime(winit::event::Ime::Commit(_)) => {}
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 self.scale_factor = scale_factor;
                 let size = self.window().inner_size();
@@ -279,17 +336,7 @@ impl<A: App> ApplicationHandler for Runner<A> {
             }
             WindowEvent::RedrawRequested => {
                 self.render();
-
-                self.mouse.left_just_pressed = false;
-                self.mouse.left_just_released = false;
-                self.mouse.right_just_pressed = false;
-                self.mouse.right_just_released = false;
-                self.mouse.middle_just_pressed = false;
-                self.mouse.middle_just_released = false;
-                self.mouse.scroll_x = 0.0;
-                self.mouse.scroll_y = 0.0;
-                self.input.keys_just_pressed.clear();
-                self.input.keys_just_released.clear();
+                self.input.clear_frame_state();
             }
             WindowEvent::CloseRequested => event_loop.exit(),
             _ => {}
