@@ -116,6 +116,7 @@ impl<A: App> Runner<A> {
                     cursor_y += size.1 + gap;
                 }
             }
+            Element::Empty => {}
         }
     }
 
@@ -153,12 +154,11 @@ impl<A: App> Runner<A> {
                 }
                 (w, h)
             }
+            Element::Empty => (0.0, 0.0),
         }
     }
 
     fn render(&mut self) {
-        println!("render");
-
         let frame = match self.gpu_mut().begin_frame() {
             Ok(f) => f,
             Err(_) => return,

@@ -18,6 +18,11 @@ pub enum Element {
         gap: f32,
         children: Vec<Element>,
     },
+    Empty,
+}
+
+pub fn empty() -> Element {
+    Element::Empty
 }
 
 pub fn rect(w: f32, h: f32, color: Color) -> Element {

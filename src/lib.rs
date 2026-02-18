@@ -20,7 +20,7 @@ mod events;
 mod color;
 
 pub use app::{run, App};
-pub use element::{column, rect, row, text, Element};
+pub use element::{column, rect, row, text, empty, Element};
 pub use fonts::{FontId, Fonts};
 pub use events::{Events, Keyboard, Mouse};
 pub use color::Color;

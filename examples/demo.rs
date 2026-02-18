@@ -4,13 +4,15 @@ use winit::keyboard::KeyCode;
 struct MyApp {
     count: u32,
     switch: bool,
+    num_texts: u32,
 }
 
 impl App for MyApp {
     fn new() -> Self {
-        Self { 
+        Self {
             count: 0,
             switch: false,
+            num_texts: 0,
         }
     }
 
@@ -18,24 +20,16 @@ impl App for MyApp {
         if events.mouse.left_just_pressed {
             self.count += 1;
         }
-
-        if events.keyboard.is_just_pressed(KeyCode::KeyS) {
-            self.switch = !self.switch;
+        if events.keyboard.is_just_pressed(KeyCode::KeyF) {
+            self.num_texts += 1;
         }
 
-        row(
-            10.0,
-            vec![
-                if self.switch {
-                    text("A", Color::RED)
-                } else {
-                    text("A", Color::WHITE)
-                },
-                text(&format!("Count: {}", self.count), Color::WHITE),
-                text(&format!("Count: {}", self.count), Color::WHITE),
-                text(&format!("Count: {}", self.count), Color::WHITE),
-            ],
-        )
+        let mut children = vec![];
+        for _ in 0..self.num_texts {
+            children.push(text(&format!("Count: {}", self.count), Color::WHITE));
+        }
+
+        row(0.0, children)
     }
 }
 
