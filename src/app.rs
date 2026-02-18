@@ -8,11 +8,11 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::{Element, Fonts, GpuContext, Input, ShapeRenderer, TextRenderer};
+use crate::{Element, Events, Fonts, GpuContext, ShapeRenderer, TextRenderer};
 
 pub trait App: 'static + Sized {
     fn new() -> Self;
-    fn update(&mut self, input: &Input) -> Element;
+    fn update(&mut self, events: &Events) -> Element;
 }
 
 pub fn run<A: App>(title: &str, width: u32, height: u32) {
@@ -35,7 +35,7 @@ struct Runner<A: App> {
     text_renderer: Option<TextRenderer>,
     shape_renderer: Option<ShapeRenderer>,
     fonts: Option<Fonts>,
-    input: Input,
+    events: Events,
 }
 
 impl<A: App> Runner<A> {
@@ -51,7 +51,7 @@ impl<A: App> Runner<A> {
             text_renderer: None,
             shape_renderer: None,
             fonts: None,
-            input: Input::default(),
+            events: Events::default(),
         }
     }
 
@@ -157,6 +157,8 @@ impl<A: App> Runner<A> {
     }
 
     fn render(&mut self) {
+        println!("render");
+
         let frame = match self.gpu_mut().begin_frame() {
             Ok(f) => f,
             Err(_) => return,
@@ -165,7 +167,7 @@ impl<A: App> Runner<A> {
         let (mut encoder, finisher, view, msaa_view) = frame.begin();
         let (width, height) = self.logical_size();
 
-        let tree = self.app.update(&self.input);
+        let tree = self.app.update(&self.events);
         self.draw_element(&tree, 0.0, 0.0);
 
         {
@@ -266,29 +268,35 @@ impl<A: App> ApplicationHandler for Runner<A> {
             WindowEvent::CursorMoved { position, .. } => {
                 let x = (position.x / self.scale_factor) as f32;
                 let y = (position.y / self.scale_factor) as f32;
-                self.input.mouse_dx = x - self.input.mouse_x;
-                self.input.mouse_dy = y - self.input.mouse_y;
-                self.input.mouse_x = x;
-                self.input.mouse_y = y;
+                self.events.mouse.dx = x - self.events.mouse.x;
+                self.events.mouse.dy = y - self.events.mouse.y;
+                self.events.mouse.x = x;
+                self.events.mouse.y = y;
                 self.window().request_redraw();
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let pressed = state == ElementState::Pressed;
                 match button {
                     MouseButton::Left => {
-                        self.input.left_just_pressed = pressed && !self.input.left_pressed;
-                        self.input.left_just_released = !pressed && self.input.left_pressed;
-                        self.input.left_pressed = pressed;
+                        self.events.mouse.left_just_pressed =
+                            pressed && !self.events.mouse.left_pressed;
+                        self.events.mouse.left_just_released =
+                            !pressed && self.events.mouse.left_pressed;
+                        self.events.mouse.left_pressed = pressed;
                     }
                     MouseButton::Right => {
-                        self.input.right_just_pressed = pressed && !self.input.right_pressed;
-                        self.input.right_just_released = !pressed && self.input.right_pressed;
-                        self.input.right_pressed = pressed;
+                        self.events.mouse.right_just_pressed =
+                            pressed && !self.events.mouse.right_pressed;
+                        self.events.mouse.right_just_released =
+                            !pressed && self.events.mouse.right_pressed;
+                        self.events.mouse.right_pressed = pressed;
                     }
                     MouseButton::Middle => {
-                        self.input.middle_just_pressed = pressed && !self.input.middle_pressed;
-                        self.input.middle_just_released = !pressed && self.input.middle_pressed;
-                        self.input.middle_pressed = pressed;
+                        self.events.mouse.middle_just_pressed =
+                            pressed && !self.events.mouse.middle_pressed;
+                        self.events.mouse.middle_just_released =
+                            !pressed && self.events.mouse.middle_pressed;
+                        self.events.mouse.middle_pressed = pressed;
                     }
                     _ => {}
                 }
@@ -297,12 +305,12 @@ impl<A: App> ApplicationHandler for Runner<A> {
             WindowEvent::MouseWheel { delta, .. } => {
                 match delta {
                     MouseScrollDelta::LineDelta(x, y) => {
-                        self.input.scroll_x = x;
-                        self.input.scroll_y = y;
+                        self.events.mouse.scroll_x = x;
+                        self.events.mouse.scroll_y = y;
                     }
                     MouseScrollDelta::PixelDelta(pos) => {
-                        self.input.scroll_x = pos.x as f32;
-                        self.input.scroll_y = pos.y as f32;
+                        self.events.mouse.scroll_x = pos.x as f32;
+                        self.events.mouse.scroll_y = pos.y as f32;
                     }
                 }
                 self.window().request_redraw();
@@ -310,11 +318,11 @@ impl<A: App> ApplicationHandler for Runner<A> {
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(key) = event.physical_key {
                     if event.state == ElementState::Pressed {
-                        self.input.keys_pressed.insert(key);
-                        self.input.keys_just_pressed.insert(key);
+                        self.events.keyboard.pressed.insert(key);
+                        self.events.keyboard.just_pressed.insert(key);
                     } else {
-                        self.input.keys_pressed.remove(&key);
-                        self.input.keys_just_released.insert(key);
+                        self.events.keyboard.pressed.remove(&key);
+                        self.events.keyboard.just_released.insert(key);
                     }
                 }
                 self.window().request_redraw();
@@ -336,7 +344,7 @@ impl<A: App> ApplicationHandler for Runner<A> {
             }
             WindowEvent::RedrawRequested => {
                 self.render();
-                self.input.clear_frame_state();
+                self.events.clear_frame_state();
             }
             WindowEvent::CloseRequested => event_loop.exit(),
             _ => {}
