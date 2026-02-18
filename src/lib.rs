@@ -14,12 +14,14 @@ pub use render::shape_renderer::ShapeRenderer;
 pub use render::text_renderer::TextRenderer;
 
 mod app;
+mod ctx;
 mod fonts;
 mod mouse;
 mod input;
 mod color;
 
-pub use app::{App, BentoApp};
+pub use app::{run, App};
+pub use ctx::Ctx;
 pub use fonts::{FontId, Fonts};
 pub use mouse::MouseState;
 pub use input::InputState;
