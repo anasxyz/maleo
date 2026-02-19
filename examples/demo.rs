@@ -5,12 +5,14 @@ use winit::keyboard::KeyCode;
 
 struct MyApp {
     count: i32,
+    text: String,
 }
 
 impl App for MyApp {
     fn new() -> Self {
         Self {
             count: 0,
+            text: "".to_string(),
         }
     }
 
@@ -19,9 +21,18 @@ impl App for MyApp {
             std::process::exit(0);
         }
 
-        row(vec![
-            text(&format!("Pressed: {:?}", events.keyboard.pressed), Color::rgb(1.0, 1.0, 1.0)),
-        ])
+        for k in &events.keyboard.just_pressed {
+            self.text.push_str(&k.to_string());
+        }
+
+        if events.keyboard.is_just_pressed(Key::Backspace) {
+            self.text.pop();
+        }
+
+        row(vec![text(
+            &format!("Text: {}", self.text),
+            Color::rgb(1.0, 1.0, 1.0),
+        )])
     }
 }
 
