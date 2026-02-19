@@ -31,6 +31,27 @@ impl Default for Settings {
     }
 }
 
+impl Settings {
+    pub fn title(mut self, title: &str) -> Self {
+        self.title = title.to_string();
+        self
+    }
+
+    pub fn width(mut self, width: u32) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub fn height(mut self, height: u32) -> Self {
+        self.height = height;
+        self
+    }
+    pub fn clear_color(mut self, color: Color) -> Self {
+        self.clear_color = color;
+        self
+    }
+}
+
 pub trait App: 'static + Sized {
     fn new() -> Self;
     fn update(&mut self, events: &Events) -> Element;

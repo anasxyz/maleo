@@ -276,3 +276,7 @@ pub fn column(children: Vec<Element>) -> Element {
 pub fn empty() -> Element {
     Element::Empty
 }
+
+pub fn exit() {
+    std::process::exit(0);
+}

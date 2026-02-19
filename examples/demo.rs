@@ -1,7 +1,6 @@
 #![allow(dead_code, unused)]
 
 use bento::*;
-use winit::keyboard::KeyCode;
 
 struct MyApp {
     count: i32,
@@ -18,7 +17,7 @@ impl App for MyApp {
 
     fn update(&mut self, events: &Events) -> Element {
         if events.keyboard.is_just_pressed(Key::Escape) {
-            std::process::exit(0);
+            exit();
         }
 
         for k in &events.keyboard.just_pressed {
