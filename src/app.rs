@@ -13,18 +13,33 @@ use crate::{
     Color, Element, Events, Fonts, GpuContext, ShapeRenderer, TextRenderer,
 };
 
-pub trait App: 'static + Sized {
-    fn new() -> Self;
-    fn update(&mut self, events: &Events) -> Element;
-    fn clear_color(&self) -> Color {
-        Color::rgb(0.1, 0.1, 0.12)
+pub struct Settings {
+    pub title: String,
+    pub width: u32,
+    pub height: u32,
+    pub clear_color: Color,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            title: "Bento UI".to_string(),
+            width: 800,
+            height: 600,
+            clear_color: Color::rgb(0.1, 0.1, 0.12),
+        }
     }
 }
 
-pub fn run<A: App>(title: &str, width: u32, height: u32) {
+pub trait App: 'static + Sized {
+    fn new() -> Self;
+    fn update(&mut self, events: &Events) -> Element;
+}
+
+pub fn run<A: App>(settings: Settings) {
     EventLoop::new()
         .unwrap()
-        .run_app(&mut Runner::new(A::new(), title, width, height))
+        .run_app(&mut Runner::new(A::new(), settings))
         .unwrap();
 }
 
@@ -40,16 +55,16 @@ struct Runner<A: App> {
     shape_renderer: Option<ShapeRenderer>,
     fonts: Option<Fonts>,
     events: Events,
-    hovered_last_frame: HashSet<usize>,
+    clear_color: Color,
 }
 
 impl<A: App> Runner<A> {
-    fn new(app: A, title: &str, width: u32, height: u32) -> Self {
+    fn new(app: A, settings: Settings) -> Self {
         Self {
             app,
-            title: title.to_string(),
-            width,
-            height,
+            title: settings.title.to_string(),
+            width: settings.width,
+            height: settings.height,
             window: None,
             gpu: None,
             scale_factor: 1.0,
@@ -57,7 +72,7 @@ impl<A: App> Runner<A> {
             shape_renderer: None,
             fonts: None,
             events: Events::default(),
-            hovered_last_frame: HashSet::new(),
+            clear_color: settings.clear_color,
         }
     }
 
@@ -89,6 +104,7 @@ impl<A: App> Runner<A> {
     }
 
     fn render(&mut self) {
+        println!("Rendering...");
 
         let frame = match self.gpu_mut().begin_frame() {
             Ok(f) => f,
@@ -103,7 +119,7 @@ impl<A: App> Runner<A> {
 
         {
             let gpu = self.gpu.as_ref().unwrap();
-            let clear = self.app.clear_color();
+            let clear = self.clear_color;
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -169,6 +185,18 @@ impl<A: App> Runner<A> {
                     0.0,
                     *color,
                 );
+            }
+            Element::Row { style, children } => {
+                let mut x = 0.0;
+                for child in children {
+                    self.draw_element(&child);
+                }
+            }
+            Element::Column { style, children } => {
+                let mut y = 0.0;
+                for child in children {
+                    self.draw_element(&child);
+                }
             }
         }
     }

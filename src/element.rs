@@ -142,28 +142,6 @@ impl Callbacks {
     }
 }
 
-pub struct ButtonStyle {
-    pub color: Color,
-    pub hover_color: Color,
-    pub text_color: Color,
-    pub corner_radius: f32,
-}
-
-impl ButtonStyle {
-    pub fn new(color: Color) -> Self {
-        Self {
-            hover_color: Color::rgb(
-                (color.r + 0.1).min(1.0),
-                (color.g + 0.1).min(1.0),
-                (color.b + 0.1).min(1.0),
-            ),
-            color,
-            text_color: Color::WHITE,
-            corner_radius: 4.0,
-        }
-    }
-}
-
 pub enum Element {
     Rect {
         w: f32,
@@ -177,6 +155,14 @@ pub enum Element {
         color: Color,
         style: Style,
     },
+    Row {
+        style: Style,
+        children: Vec<Element>,
+    },
+    Column {
+        style: Style,
+        children: Vec<Element>,
+    },
     Empty,
 }
 
@@ -185,6 +171,8 @@ impl Element {
         match self {
             Element::Rect { style, .. } => Some(style),
             Element::Text { style, .. } => Some(style),
+            Element::Row { style, .. } => Some(style),
+            Element::Column { style, .. } => Some(style),
             Element::Empty => None,
         }
     }
@@ -268,6 +256,20 @@ pub fn text(content: &str, color: Color) -> Element {
         content: content.to_string(),
         color,
         style: Style::new(),
+    }
+}
+
+pub fn row(children: Vec<Element>) -> Element {
+    Element::Row {
+        style: Style::new(),
+        children,
+    }
+}
+
+pub fn column(children: Vec<Element>) -> Element {
+    Element::Column {
+        style: Style::new(),
+        children,
     }
 }
 

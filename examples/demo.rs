@@ -1,5 +1,6 @@
+#![allow(dead_code, unused)]
+
 use bento::*;
-use glyphon::TextArea;
 use winit::keyboard::KeyCode;
 
 struct MyApp {
@@ -13,18 +14,18 @@ impl App for MyApp {
         }
     }
 
-    fn clear_color(&self) -> Color {
-        Color::rgb(0.13, 0.13, 0.16)
-    }
-
     fn update(&mut self, events: &Events) -> Element {
         if events.keyboard.is_just_pressed(KeyCode::Escape) {
             std::process::exit(0);
         }
 
+        row(vec![
+            text("Hello World", Color::rgb(1.0, 1.0, 1.0)),
+            text("This is insane", Color::rgb(1.0, 1.0, 1.0)),
+        ])
     }
 }
 
 fn main() {
-    bento::run::<MyApp>("Bento", 800, 520);
+    bento::run::<MyApp>(Settings::default());
 }

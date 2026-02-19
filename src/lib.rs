@@ -19,7 +19,7 @@ mod fonts;
 mod events;
 mod color;
 
-pub use app::{run, App};
+pub use app::{run, App, Settings};
 pub use element::*;
 pub use fonts::{FontId, Fonts};
 pub use events::{Events, Keyboard, Mouse};
