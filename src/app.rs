@@ -9,9 +9,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::{
-    Color, Element, Events, Fonts, GpuContext, ShapeRenderer, TextRenderer,
-};
+use crate::{Color, Element, Events, Font, FontId, Fonts, GpuContext, ShapeRenderer, TextRenderer};
 
 pub struct Settings {
     pub title: String,
@@ -55,6 +53,7 @@ impl Settings {
 pub trait App: 'static + Sized {
     fn new() -> Self;
     fn update(&mut self, events: &Events) -> Element;
+    fn fonts(&self, fonts: &mut Fonts) {}
     fn run(settings: Settings) {
         run::<Self>(settings);
     }
@@ -189,15 +188,23 @@ impl<A: App> Runner<A> {
         match el {
             Element::Empty => {}
             Element::Rect { w, h, color, .. } => {
-                self.shape_renderer
-                    .as_mut()
-                    .unwrap()
-                    .draw_rect(0.0, 0.0, *w, *h, color.to_array(), [0.0; 4], 0.0);
+                self.shape_renderer.as_mut().unwrap().draw_rect(
+                    0.0,
+                    0.0,
+                    *w,
+                    *h,
+                    color.to_array(),
+                    [0.0; 4],
+                    0.0,
+                );
             }
-            Element::Text { content, color, .. } => {
+            Element::Text { content, color, font, .. } => {
                 let fonts = self.fonts.as_mut().unwrap();
-                let font_id = fonts.default();
-                let entry = fonts.get(font_id);
+                let font_id = match font {
+                    Font::Name(name) => fonts.get_by_name(name),
+                    Font::Default => fonts.default(),
+                };
+                let entry = fonts.get(font_id.unwrap());
                 let family = entry.family.clone();
                 let size = entry.size;
                 self.text_renderer.as_mut().unwrap().draw(
@@ -263,7 +270,14 @@ impl<A: App> ApplicationHandler for Runner<A> {
         }
 
         let mut fonts = Fonts::new();
-        fonts.add("default", "Arial", 14.0);
+        // run user fonts function
+        self.app.fonts(&mut fonts);
+        if fonts.default().is_none() {
+            println!("No default font found, adding default font...");
+            let default_font_id = fonts.add("default", "Arial", 14.0);
+            fonts.set_default(default_font_id);
+        }
+
         self.fonts = Some(fonts);
 
         self.window().request_redraw();

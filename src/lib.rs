@@ -21,6 +21,6 @@ mod color;
 
 pub use app::{App, Settings};
 pub use element::*;
-pub use fonts::{FontId, Fonts};
+pub use fonts::{FontId, Fonts, Font};
 pub use events::{Events, Keyboard, Mouse, Key, key_code_to_key};
 pub use color::Color;

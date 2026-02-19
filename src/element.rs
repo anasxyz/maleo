@@ -1,4 +1,4 @@
-use crate::Color;
+use crate::{Color, Font, FontId};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Align {
@@ -153,6 +153,7 @@ pub enum Element {
     Text {
         content: String,
         color: Color,
+        font: Font,
         style: Style,
     },
     Row {
@@ -239,6 +240,16 @@ impl Element {
         }
         self
     }
+
+    pub fn font(mut self, font_: Font) -> Self {
+        if let Element::Text {
+            ref mut font, ..
+        } = self
+        {
+            *font = font_;
+        }
+        self
+    }
 }
 
 pub fn rect(w: f32, h: f32, color: Color) -> Element {
@@ -255,6 +266,7 @@ pub fn text(content: &str, color: Color) -> Element {
     Element::Text {
         content: content.to_string(),
         color,
+        font: Font::Default,
         style: Style::new(),
     }
 }

@@ -1,6 +1,11 @@
 use std::collections::HashMap;
 use glyphon::{FontSystem, Attrs, Family, Shaping, Buffer, Metrics};
 
+pub enum Font {
+    Name(String),
+    Default,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FontId(usize);
 
@@ -15,6 +20,7 @@ pub struct Fonts {
     measure_cache: HashMap<(usize, String), (f32, f32)>,
     name_to_id: HashMap<String, FontId>,
     pub default_padding: f32,
+    pub default: Option<FontId>,
 }
 
 impl Fonts {
@@ -25,6 +31,7 @@ impl Fonts {
             measure_cache: HashMap::new(),
             name_to_id: HashMap::new(),
             default_padding: 8.0,
+            default: None,
         }
     }
 
@@ -50,8 +57,16 @@ impl Fonts {
         self.name_to_id.get(name).copied()
     }
 
-    pub fn default(&self) -> FontId {
-        self.get_by_name("default").unwrap()
+    pub fn default(&self) -> Option<FontId> {
+        self.default
+    }
+
+    pub fn set_default(&mut self, id: FontId) {
+        self.default = Some(id);
+    }
+
+    // displays all fonts info, id, name, family, size
+    pub fn display_all_fonts(&self) {
     }
 
     pub fn measure(&mut self, text: &str, id: FontId) -> (f32, f32) {
