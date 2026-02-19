@@ -34,9 +34,12 @@ impl Default for Settings {
 pub trait App: 'static + Sized {
     fn new() -> Self;
     fn update(&mut self, events: &Events) -> Element;
+    fn run(settings: Settings) {
+        run::<Self>(settings);
+    }
 }
 
-pub fn run<A: App>(settings: Settings) {
+fn run<A: App>(settings: Settings) {
     EventLoop::new()
         .unwrap()
         .run_app(&mut Runner::new(A::new(), settings))

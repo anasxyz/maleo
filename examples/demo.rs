@@ -27,5 +27,5 @@ impl App for MyApp {
 }
 
 fn main() {
-    bento::run::<MyApp>(Settings::default());
+    MyApp::run(Settings::default());
 }
