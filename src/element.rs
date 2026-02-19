@@ -48,6 +48,22 @@ impl Padding {
     pub fn right(v: f32) -> Self { Self { top: 0.0, right: v, bottom: 0.0, left: 0.0 } }
 }
 
+pub enum Size {
+    Fixed(f32),
+    Fill,
+    Percent(f32),
+}
+
+impl Size {
+    pub fn fixed(v: f32) -> Self { Size::Fixed(v) }
+    pub fn fill() -> Self { Size::Fill }
+    pub fn percent(v: f32) -> Self { Size::Percent(v) }
+}
+
+impl Default for Size {
+    fn default() -> Self { Size::Fixed(0.0) }
+}
+
 impl Default for Padding {
     fn default() -> Self { Self::all(0.0) }
 }
@@ -59,12 +75,15 @@ pub enum Element<A> {
         color: Color,
         hover_color: Option<Color>,
         padding: Padding,
+        width: Option<Size>,
+        height: Option<Size>,
         callbacks: Callbacks<A>,
     },
     Text {
         content: String,
         color: Color,
         padding: Padding,
+        width: Option<Size>,
     },
     Button {
         label: String,
@@ -72,27 +91,54 @@ pub enum Element<A> {
         h: f32,
         style: ButtonStyle,
         padding: Padding,
+        width: Option<Size>,
         on_click: Option<Box<dyn FnMut(&mut A)>>,
     },
     Container {
         color: Color,
         padding: Padding,
+        width: Option<Size>,
+        height: Option<Size>,
         child: Box<Element<A>>,
     },
     Row {
         gap: f32,
         padding: Padding,
+        width: Option<Size>,
         children: Vec<Element<A>>,
     },
     Column {
         gap: f32,
         padding: Padding,
+        width: Option<Size>,
         children: Vec<Element<A>>,
     },
     Empty,
 }
 
 impl<A: 'static> Element<A> {
+    pub fn width(mut self, s: Size) -> Self {
+        match &mut self {
+            Element::Rect { width, .. } => *width = Some(s),
+            Element::Text { width, .. } => *width = Some(s),
+            Element::Button { width, .. } => *width = Some(s),
+            Element::Container { width, .. } => *width = Some(s),
+            Element::Row { width, .. } => *width = Some(s),
+            Element::Column { width, .. } => *width = Some(s),
+            _ => {}
+        }
+        self
+    }
+
+    pub fn height(mut self, s: Size) -> Self {
+        match &mut self {
+            Element::Rect { height, .. } => *height = Some(s),
+            Element::Container { height, .. } => *height = Some(s),
+            _ => {}
+        }
+        self
+    }
+
     pub fn gap(mut self, gap: f32) -> Self {
         match &mut self {
             Element::Row { gap: g, .. } => *g = gap,
@@ -160,17 +206,17 @@ impl<A: 'static> Element<A> {
 }
 
 pub fn container<A>(color: Color, child: Element<A>) -> Element<A> {
-    Element::Container { color, padding: Padding::default(), child: Box::new(child) }
+    Element::Container { color, padding: Padding::default(), width: None, height: None, child: Box::new(child) }
 }
 
 pub fn empty<A>() -> Element<A> { Element::Empty }
 
 pub fn rect<A>(w: f32, h: f32, color: Color) -> Element<A> {
-    Element::Rect { w, h, color, hover_color: None, padding: Padding::default(), callbacks: Callbacks::none() }
+    Element::Rect { w, h, color, hover_color: None, padding: Padding::default(), width: None, height: None, callbacks: Callbacks::none() }
 }
 
 pub fn text<A>(content: &str, color: Color) -> Element<A> {
-    Element::Text { content: content.to_string(), color, padding: Padding::default() }
+    Element::Text { content: content.to_string(), color, padding: Padding::default(), width: None }
 }
 
 pub fn button<A>(label: &str, w: f32, h: f32, color: Color) -> Element<A> {
@@ -185,16 +231,17 @@ pub fn button<A>(label: &str, w: f32, h: f32, color: Color) -> Element<A> {
         h,
         style: ButtonStyle { color, hover_color, ..ButtonStyle::default() },
         padding: Padding::default(),
+        width: None,
         on_click: None,
     }
 }
 
 pub fn row<A>(children: Vec<Element<A>>) -> Element<A> {
-    Element::Row { gap: 0.0, padding: Padding::default(), children }
+    Element::Row { gap: 0.0, padding: Padding::default(), width: None, children }
 }
 
 pub fn column<A>(children: Vec<Element<A>>) -> Element<A> {
-    Element::Column { gap: 0.0, padding: Padding::default(), children }
+    Element::Column { gap: 0.0, padding: Padding::default(), width: None, children }
 }
 
 pub struct LayoutNode<A> {

@@ -10,7 +10,8 @@ use winit::{
 };
 
 use crate::{
-    Color, Element, Events, Fonts, GpuContext, LayoutKind, LayoutNode, ShapeRenderer, TextRenderer,
+    Color, Element, Events, Fonts, GpuContext, LayoutKind, LayoutNode, ShapeRenderer, Size,
+    TextRenderer,
 };
 
 pub trait App: 'static + Sized {
@@ -88,7 +89,113 @@ impl<A: App> Runner<A> {
         }
     }
 
-    fn layout(&mut self, element: Element<A>, x: f32, y: f32) -> LayoutNode<A> {
+    fn resolve_size(s: &Option<Size>, natural: f32, avail: f32) -> f32 {
+        match s {
+            None => natural,
+            Some(Size::Fixed(v)) => *v,
+            Some(Size::Fill) => avail,
+            Some(Size::Percent(p)) => avail * p / 100.0,
+        }
+    }
+
+    fn is_fill(s: &Option<Size>) -> bool {
+        matches!(s, Some(Size::Fill))
+    }
+
+    fn child_is_fill_w(element: &Element<A>) -> bool {
+        match element {
+            Element::Rect { width, .. } => Self::is_fill(width),
+            Element::Text { width, .. } => Self::is_fill(width),
+            Element::Button { width, .. } => Self::is_fill(width),
+            Element::Container { width, .. } => Self::is_fill(width),
+            Element::Row { width, .. } => Self::is_fill(width),
+            Element::Column { width, .. } => Self::is_fill(width),
+            _ => false,
+        }
+    }
+
+    fn layout_measure(&mut self, element: &Element<A>, avail_w: f32, avail_h: f32) -> (f32, f32) {
+        match element {
+            Element::Rect {
+                w,
+                h,
+                padding: p,
+                width,
+                height,
+                ..
+            } => {
+                let w = Self::resolve_size(width, *w, avail_w - p.left - p.right);
+                let h = Self::resolve_size(height, *h, avail_h - p.top - p.bottom);
+                (w + p.left + p.right, h + p.top + p.bottom)
+            }
+            Element::Text {
+                content,
+                padding: p,
+                width,
+                ..
+            } => {
+                let fonts = self.fonts.as_mut().unwrap();
+                let font = fonts.default();
+                let (tw, th) = fonts.measure(content, font);
+                let w = Self::resolve_size(width, tw, avail_w - p.left - p.right);
+                (w + p.left + p.right, th + p.top + p.bottom)
+            }
+            Element::Button {
+                w,
+                h,
+                padding: p,
+                width,
+                ..
+            } => {
+                let w = Self::resolve_size(width, *w, avail_w - p.left - p.right);
+                (w + p.left + p.right, *h + p.top + p.bottom)
+            }
+            Element::Container {
+                padding: p,
+                width,
+                child,
+                ..
+            } => {
+                let inner_avail_w = avail_w - p.left - p.right;
+                let (cw, ch) =
+                    self.layout_measure(child, inner_avail_w, avail_h - p.top - p.bottom);
+                let w = Self::resolve_size(width, cw + p.left + p.right, avail_w);
+                (w, ch + p.top + p.bottom)
+            }
+            Element::Column {
+                gap,
+                padding: p,
+                width,
+                children,
+                ..
+            } => {
+                let inner_avail_w = avail_w - p.left - p.right;
+                let mut max_w = 0.0f32;
+                let mut total_h = 0.0f32;
+                for (i, child) in children.iter().enumerate() {
+                    let (cw, ch) = self.layout_measure(child, inner_avail_w, avail_h);
+                    max_w = max_w.max(cw);
+                    total_h += ch;
+                    if i < children.len() - 1 {
+                        total_h += gap;
+                    }
+                }
+                let w = Self::resolve_size(width, max_w + p.left + p.right, avail_w);
+                (w, total_h + p.top + p.bottom)
+            }
+            Element::Empty => (0.0, 0.0),
+            _ => (avail_w, avail_h),
+        }
+    }
+
+    fn layout(
+        &mut self,
+        element: Element<A>,
+        x: f32,
+        y: f32,
+        avail_w: f32,
+        avail_h: f32,
+    ) -> LayoutNode<A> {
         match element {
             Element::Rect {
                 w,
@@ -96,15 +203,15 @@ impl<A: App> Runner<A> {
                 color,
                 hover_color,
                 padding: p,
+                width,
+                height,
                 callbacks,
             } => {
-                let x = x + p.left;
-                let y = y + p.top;
-                let w = w + p.left + p.right;
-                let h = h + p.top + p.bottom;
+                let w = Self::resolve_size(&width, w, avail_w - p.left - p.right);
+                let h = Self::resolve_size(&height, h, avail_h - p.top - p.bottom);
                 LayoutNode {
-                    x,
-                    y,
+                    x: x + p.left,
+                    y: y + p.top,
                     w,
                     h,
                     kind: LayoutKind::Rect {
@@ -119,19 +226,17 @@ impl<A: App> Runner<A> {
                 content,
                 color,
                 padding: p,
+                width,
             } => {
                 let fonts = self.fonts.as_mut().unwrap();
                 let font = fonts.default();
-                let (w, h) = fonts.measure(&content, font);
-                let x = x + p.left;
-                let y = y + p.top;
-                let w = w + p.left + p.right;
-                let h = h + p.top + p.bottom;
+                let (tw, th) = fonts.measure(&content, font);
+                let w = Self::resolve_size(&width, tw, avail_w - p.left - p.right);
                 LayoutNode {
-                    x,
-                    y,
+                    x: x + p.left,
+                    y: y + p.top,
                     w,
-                    h,
+                    h: th,
                     kind: LayoutKind::Text { content, color },
                 }
             }
@@ -141,15 +246,13 @@ impl<A: App> Runner<A> {
                 h,
                 style,
                 padding: p,
+                width,
                 on_click,
             } => {
-                let x = x + p.left;
-                let y = y + p.top;
-                let w = w + p.left + p.right;
-                let h = h + p.top + p.bottom;
+                let w = Self::resolve_size(&width, w, avail_w - p.left - p.right);
                 LayoutNode {
-                    x,
-                    y,
+                    x: x + p.left,
+                    y: y + p.top,
                     w,
                     h,
                     kind: LayoutKind::Button {
@@ -163,18 +266,46 @@ impl<A: App> Runner<A> {
             Element::Row {
                 gap,
                 padding: p,
+                width,
                 children,
             } => {
+                let inner_avail_w = Self::resolve_size(&width, avail_w, avail_w) - p.left - p.right;
+                let inner_avail_h = avail_h - p.top - p.bottom;
+                let n = children.len();
+
+                // first pass is measure fixed children, count fill children
+                let mut fixed_w = if n > 0 { gap * (n as f32 - 1.0) } else { 0.0 };
+                let mut fill_count = 0usize;
+                for child in &children {
+                    if Self::child_is_fill_w(child) {
+                        fill_count += 1;
+                    } else {
+                        let node = self.layout_measure(child, inner_avail_w, inner_avail_h);
+                        fixed_w += node.0;
+                    }
+                }
+                let fill_w = if fill_count > 0 {
+                    (inner_avail_w - fixed_w).max(0.0) / fill_count as f32
+                } else {
+                    0.0
+                };
+
+                // second pass is layout with resolved widths
                 let mut cursor_x = x + p.left;
                 let mut max_h = 0.0f32;
-                let mut nodes = Vec::with_capacity(children.len());
+                let mut nodes = Vec::with_capacity(n);
                 for child in children {
-                    let node = self.layout(child, cursor_x, y + p.top);
+                    let child_avail = if Self::child_is_fill_w(&child) {
+                        fill_w
+                    } else {
+                        inner_avail_w
+                    };
+                    let node = self.layout(child, cursor_x, y + p.top, child_avail, inner_avail_h);
                     cursor_x += node.w + gap;
                     max_h = max_h.max(node.h);
                     nodes.push(node);
                 }
-                let w = cursor_x - x + p.right;
+                let w = Self::resolve_size(&width, cursor_x - x - gap + p.right, avail_w);
                 let h = max_h + p.top + p.bottom;
                 LayoutNode {
                     x,
@@ -187,18 +318,22 @@ impl<A: App> Runner<A> {
             Element::Column {
                 gap,
                 padding: p,
+                width,
                 children,
             } => {
+                let inner_avail_w = Self::resolve_size(&width, avail_w, avail_w) - p.left - p.right;
+                let n = children.len();
+
                 let mut cursor_y = y + p.top;
                 let mut max_w = 0.0f32;
-                let mut nodes = Vec::with_capacity(children.len());
+                let mut nodes = Vec::with_capacity(n);
                 for child in children {
-                    let node = self.layout(child, x + p.left, cursor_y);
+                    let node = self.layout(child, x + p.left, cursor_y, inner_avail_w, avail_h);
                     cursor_y += node.h + gap;
                     max_w = max_w.max(node.w);
                     nodes.push(node);
                 }
-                let w = max_w + p.left + p.right;
+                let w = Self::resolve_size(&width, max_w + p.left + p.right, avail_w);
                 let h = cursor_y - y + p.bottom;
                 LayoutNode {
                     x,
@@ -211,11 +346,19 @@ impl<A: App> Runner<A> {
             Element::Container {
                 color,
                 padding: p,
+                width,
+                height,
                 child,
             } => {
-                let inner = self.layout(*child, x + p.left, y + p.top);
-                let w = inner.w + p.left + p.right;
-                let h = inner.h + p.top + p.bottom;
+                let inner_avail_w = Self::resolve_size(&width, avail_w, avail_w) - p.left - p.right;
+                let inner = self.layout(*child, x + p.left, y + p.top, inner_avail_w, avail_h);
+                let w = Self::resolve_size(&width, inner.w + p.left + p.right, avail_w);
+                let h = match &height {
+                    None => inner.h + p.top + p.bottom,
+                    Some(Size::Fill) => avail_h,
+                    Some(Size::Fixed(v)) => *v,
+                    Some(Size::Percent(pct)) => avail_h * pct / 100.0,
+                };
                 LayoutNode {
                     x,
                     y,
@@ -432,7 +575,7 @@ impl<A: App> Runner<A> {
         let (width, height) = self.logical_size();
 
         let tree = self.app.update(&self.events);
-        let mut layout = self.layout(tree, 0.0, 0.0);
+        let mut layout = self.layout(tree, 0.0, 0.0, width, height);
 
         let mouse_x = self.events.mouse.x;
         let mouse_y = self.events.mouse.y;
