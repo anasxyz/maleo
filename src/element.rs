@@ -74,6 +74,11 @@ pub enum Element<A> {
         padding: Padding,
         on_click: Option<Box<dyn FnMut(&mut A)>>,
     },
+    Container {
+        color: Color,
+        padding: Padding,
+        child: Box<Element<A>>,
+    },
     Row {
         gap: f32,
         padding: Padding,
@@ -102,7 +107,7 @@ impl<A: 'static> Element<A> {
             Element::Rect { padding, .. } => *padding = p,
             Element::Text { padding, .. } => *padding = p,
             Element::Button { padding, .. } => *padding = p,
-            Element::Row { padding, .. } => *padding = p,
+            Element::Container { padding, .. } => *padding = p,
             Element::Column { padding, .. } => *padding = p,
             _ => {}
         }
@@ -154,6 +159,10 @@ impl<A: 'static> Element<A> {
     }
 }
 
+pub fn container<A>(color: Color, child: Element<A>) -> Element<A> {
+    Element::Container { color, padding: Padding::default(), child: Box::new(child) }
+}
+
 pub fn empty<A>() -> Element<A> { Element::Empty }
 
 pub fn rect<A>(w: f32, h: f32, color: Color) -> Element<A> {
@@ -200,6 +209,7 @@ pub enum LayoutKind<A> {
     Rect { color: Color, hover_color: Option<Color>, hovered: bool, callbacks: Callbacks<A> },
     Text { content: String, color: Color },
     Button { label: String, style: ButtonStyle, on_click: Option<Box<dyn FnMut(&mut A)>>, hovered: bool },
+    Container { color: Color, child: Box<LayoutNode<A>> },
     Children(Vec<LayoutNode<A>>),
     Empty,
 }

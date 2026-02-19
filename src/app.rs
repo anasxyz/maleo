@@ -10,38 +10,23 @@ use winit::{
 };
 
 use crate::{
-    Color, Element, Events, Fonts, GpuContext, LayoutKind, LayoutNode, ShapeRenderer, TextRenderer
+    Color, Element, Events, Fonts, GpuContext, LayoutKind, LayoutNode, ShapeRenderer, TextRenderer,
 };
 
 pub trait App: 'static + Sized {
     fn new() -> Self;
     fn update(&mut self, events: &Events) -> Element<Self>;
-    fn clear_color() -> Color {
+    fn clear_color(&self) -> Color {
         Color::rgb(0.1, 0.1, 0.12)
     }
 }
 
 pub fn run<A: App>(title: &str, width: u32, height: u32) {
-    let c = A::clear_color();
-    let clear_color = wgpu::Color {
-        r: c.r as f64,
-        g: c.g as f64,
-        b: c.b as f64,
-        a: 1.0,
-    };
     EventLoop::new()
         .unwrap()
-        .run_app(&mut Runner::new(
-            A::new(),
-            title,
-            width,
-            height,
-            clear_color,
-        ))
+        .run_app(&mut Runner::new(A::new(), title, width, height))
         .unwrap();
 }
-
-// internal runner
 
 struct Runner<A: App> {
     app: A,
@@ -56,11 +41,10 @@ struct Runner<A: App> {
     fonts: Option<Fonts>,
     events: Events,
     hovered_last_frame: HashSet<usize>,
-    clear_color: wgpu::Color,
 }
 
 impl<A: App> Runner<A> {
-    fn new(app: A, title: &str, width: u32, height: u32, clear_color: wgpu::Color) -> Self {
+    fn new(app: A, title: &str, width: u32, height: u32) -> Self {
         Self {
             app,
             title: title.to_string(),
@@ -74,7 +58,6 @@ impl<A: App> Runner<A> {
             fonts: None,
             events: Events::default(),
             hovered_last_frame: HashSet::new(),
-            clear_color,
         }
     }
 
@@ -225,6 +208,25 @@ impl<A: App> Runner<A> {
                     kind: LayoutKind::Children(nodes),
                 }
             }
+            Element::Container {
+                color,
+                padding: p,
+                child,
+            } => {
+                let inner = self.layout(*child, x + p.left, y + p.top);
+                let w = inner.w + p.left + p.right;
+                let h = inner.h + p.top + p.bottom;
+                LayoutNode {
+                    x,
+                    y,
+                    w,
+                    h,
+                    kind: LayoutKind::Container {
+                        color,
+                        child: Box::new(inner),
+                    },
+                }
+            }
             Element::Empty => LayoutNode {
                 x,
                 y,
@@ -296,6 +298,18 @@ impl<A: App> Runner<A> {
                 } else {
                     *hovered = false;
                 }
+            }
+            LayoutKind::Container { child, .. } => {
+                Self::fire_callbacks(
+                    app,
+                    child,
+                    mouse_x,
+                    mouse_y,
+                    clicked,
+                    hovered_last,
+                    hovered_this,
+                    index,
+                );
             }
             LayoutKind::Children(children) => {
                 for child in children {
@@ -387,6 +401,18 @@ impl<A: App> Runner<A> {
                     style.text_color,
                 );
             }
+            LayoutKind::Container { color, child } => {
+                sr.draw_rect(
+                    node.x,
+                    node.y,
+                    node.w,
+                    node.h,
+                    color.to_array(),
+                    [0.0; 4],
+                    0.0,
+                );
+                self.draw_layout(child);
+            }
             LayoutKind::Children(children) => {
                 for child in children {
                     self.draw_layout(child);
@@ -435,7 +461,15 @@ impl<A: App> Runner<A> {
                     view: &msaa_view,
                     resolve_target: Some(&view),
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(self.clear_color),
+                        load: wgpu::LoadOp::Clear({
+                            let c = self.app.clear_color();
+                            wgpu::Color {
+                                r: c.r as f64,
+                                g: c.g as f64,
+                                b: c.b as f64,
+                                a: 1.0,
+                            }
+                        }),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -465,8 +499,6 @@ impl<A: App> Runner<A> {
         finisher.present(encoder, &self.gpu().queue);
     }
 }
-
-// winit event handling
 
 impl<A: App> ApplicationHandler for Runner<A> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
