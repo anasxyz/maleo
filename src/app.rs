@@ -308,6 +308,7 @@ impl<A: App> ApplicationHandler for Runner<A> {
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(key) = event.physical_key {
+                    let key = crate::key_code_to_key(key);
                     if event.state == ElementState::Pressed {
                         self.events.keyboard.pressed.insert(key);
                         self.events.keyboard.just_pressed.insert(key);

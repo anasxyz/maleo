@@ -15,13 +15,12 @@ impl App for MyApp {
     }
 
     fn update(&mut self, events: &Events) -> Element {
-        if events.keyboard.is_just_pressed(KeyCode::Escape) {
+        if events.keyboard.is_just_pressed(Key::Escape) {
             std::process::exit(0);
         }
 
         row(vec![
-            text("Hello World", Color::rgb(1.0, 1.0, 1.0)),
-            text("This is insane", Color::rgb(1.0, 1.0, 1.0)),
+            text(&format!("Pressed: {:?}", events.keyboard.pressed), Color::rgb(1.0, 1.0, 1.0)),
         ])
     }
 }
