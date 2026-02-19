@@ -16,13 +16,62 @@ pub struct Padding {
 }
 
 impl Padding {
-    pub fn all(v: f32) -> Self { Self { top: v, right: v, bottom: v, left: v } }
-    pub fn horizontal(v: f32) -> Self { Self { top: 0.0, right: v, bottom: 0.0, left: v } }
-    pub fn vertical(v: f32) -> Self { Self { top: v, right: 0.0, bottom: v, left: 0.0 } }
-    pub fn top(v: f32) -> Self { Self { top: v, right: 0.0, bottom: 0.0, left: 0.0 } }
-    pub fn bottom(v: f32) -> Self { Self { top: 0.0, right: 0.0, bottom: v, left: 0.0 } }
-    pub fn left(v: f32) -> Self { Self { top: 0.0, right: 0.0, bottom: 0.0, left: v } }
-    pub fn right(v: f32) -> Self { Self { top: 0.0, right: v, bottom: 0.0, left: 0.0 } }
+    pub fn all(v: f32) -> Self {
+        Self {
+            top: v,
+            right: v,
+            bottom: v,
+            left: v,
+        }
+    }
+    pub fn horizontal(v: f32) -> Self {
+        Self {
+            top: 0.0,
+            right: v,
+            bottom: 0.0,
+            left: v,
+        }
+    }
+    pub fn vertical(v: f32) -> Self {
+        Self {
+            top: v,
+            right: 0.0,
+            bottom: v,
+            left: 0.0,
+        }
+    }
+    pub fn top(v: f32) -> Self {
+        Self {
+            top: v,
+            right: 0.0,
+            bottom: 0.0,
+            left: 0.0,
+        }
+    }
+    pub fn bottom(v: f32) -> Self {
+        Self {
+            top: 0.0,
+            right: 0.0,
+            bottom: v,
+            left: 0.0,
+        }
+    }
+    pub fn left(v: f32) -> Self {
+        Self {
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+            left: v,
+        }
+    }
+    pub fn right(v: f32) -> Self {
+        Self {
+            top: 0.0,
+            right: v,
+            bottom: 0.0,
+            left: 0.0,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -33,9 +82,15 @@ pub enum Size {
 }
 
 impl Size {
-    pub fn fixed(v: f32) -> Self { Size::Fixed(v) }
-    pub fn fill() -> Self { Size::Fill }
-    pub fn percent(v: f32) -> Self { Size::Percent(v) }
+    pub fn fixed(v: f32) -> Self {
+        Size::Fixed(v)
+    }
+    pub fn fill() -> Self {
+        Size::Fill
+    }
+    pub fn percent(v: f32) -> Self {
+        Size::Percent(v)
+    }
 }
 
 #[derive(Clone, Default)]
@@ -52,27 +107,38 @@ pub struct Style {
 }
 
 impl Default for Align {
-    fn default() -> Self { Align::Start }
+    fn default() -> Self {
+        Align::Start
+    }
 }
 
 impl Default for Padding {
-    fn default() -> Self { Self::all(0.0) }
+    fn default() -> Self {
+        Self::all(0.0)
+    }
 }
 
 impl Style {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
-pub struct Callbacks<A> {
-    pub on_click:         Option<Box<dyn FnMut(&mut A)>>,
-    pub on_hover:         Option<Box<dyn FnMut(&mut A)>>,
-    pub on_just_hovered:  Option<Box<dyn FnMut(&mut A)>>,
-    pub on_just_unhovered:Option<Box<dyn FnMut(&mut A)>>,
+pub struct Callbacks {
+    pub on_click: Option<Box<dyn FnMut()>>,
+    pub on_hover: Option<Box<dyn FnMut()>>,
+    pub on_just_hovered: Option<Box<dyn FnMut()>>,
+    pub on_just_unhovered: Option<Box<dyn FnMut()>>,
 }
 
-impl<A> Callbacks<A> {
+impl Callbacks {
     pub fn none() -> Self {
-        Self { on_click: None, on_hover: None, on_just_hovered: None, on_just_unhovered: None }
+        Self {
+            on_click: None,
+            on_hover: None,
+            on_just_hovered: None,
+            on_just_unhovered: None,
+        }
     }
 }
 
@@ -98,211 +164,113 @@ impl ButtonStyle {
     }
 }
 
-pub enum Element<A> {
+pub enum Element {
     Rect {
         w: f32,
         h: f32,
         color: Color,
-        hover_color: Option<Color>,
         style: Style,
-        callbacks: Callbacks<A>,
+        callbacks: Callbacks,
     },
     Text {
         content: String,
         color: Color,
         style: Style,
     },
-    Button {
-        label: String,
-        w: f32,
-        h: f32,
-        btn_style: ButtonStyle,
-        style: Style,
-        on_click: Option<Box<dyn FnMut(&mut A)>>,
-    },
-    Container {
-        color: Color,
-        style: Style,
-        child: Box<Element<A>>,
-    },
-    Row {
-        gap: f32,
-        style: Style,
-        children: Vec<Element<A>>,
-    },
-    Column {
-        gap: f32,
-        style: Style,
-        children: Vec<Element<A>>,
-    },
-    Overlay {
-        style: Style,
-        children: Vec<Element<A>>,
-    },
-    Scroll {
-        scroll_height: f32,
-        scroll_y: f32,
-        style: Style,
-        child: Box<Element<A>>,
-    },
     Empty,
 }
 
-impl<A: 'static> Element<A> {
+impl Element {
     fn style_mut(&mut self) -> Option<&mut Style> {
         match self {
             Element::Rect { style, .. } => Some(style),
             Element::Text { style, .. } => Some(style),
-            Element::Button { style, .. } => Some(style),
-            Element::Container { style, .. } => Some(style),
-            Element::Row { style, .. } => Some(style),
-            Element::Column { style, .. } => Some(style),
-            Element::Overlay { style, .. } => Some(style),
-            Element::Scroll { style, .. } => Some(style),
             Element::Empty => None,
         }
     }
 
     pub fn width(mut self, s: Size) -> Self {
-        if let Some(st) = self.style_mut() { st.width = Some(s); }
+        if let Some(st) = self.style_mut() {
+            st.width = Some(s);
+        }
         self
     }
 
     pub fn height(mut self, s: Size) -> Self {
-        if let Some(st) = self.style_mut() { st.height = Some(s); }
+        if let Some(st) = self.style_mut() {
+            st.height = Some(s);
+        }
         self
     }
 
     pub fn min_width(mut self, v: f32) -> Self {
-        if let Some(st) = self.style_mut() { st.min_width = Some(v); }
+        if let Some(st) = self.style_mut() {
+            st.min_width = Some(v);
+        }
         self
     }
 
     pub fn max_width(mut self, v: f32) -> Self {
-        if let Some(st) = self.style_mut() { st.max_width = Some(v); }
+        if let Some(st) = self.style_mut() {
+            st.max_width = Some(v);
+        }
         self
     }
 
     pub fn min_height(mut self, v: f32) -> Self {
-        if let Some(st) = self.style_mut() { st.min_height = Some(v); }
+        if let Some(st) = self.style_mut() {
+            st.min_height = Some(v);
+        }
         self
     }
 
     pub fn max_height(mut self, v: f32) -> Self {
-        if let Some(st) = self.style_mut() { st.max_height = Some(v); }
+        if let Some(st) = self.style_mut() {
+            st.max_height = Some(v);
+        }
         self
     }
 
     pub fn padding(mut self, p: Padding) -> Self {
-        if let Some(st) = self.style_mut() { st.padding = p; }
+        if let Some(st) = self.style_mut() {
+            st.padding = p;
+        }
         self
     }
 
     pub fn align_x(mut self, a: Align) -> Self {
-        if let Some(st) = self.style_mut() { st.align_x = a; }
+        if let Some(st) = self.style_mut() {
+            st.align_x = a;
+        }
         self
     }
 
     pub fn align_y(mut self, a: Align) -> Self {
-        if let Some(st) = self.style_mut() { st.align_y = a; }
-        self
-    }
-
-    pub fn gap(mut self, gap: f32) -> Self {
-        match &mut self {
-            Element::Row { gap: g, .. } => *g = gap,
-            Element::Column { gap: g, .. } => *g = gap,
-            _ => {}
-        }
-        self
-    }
-
-    pub fn hover_color(mut self, color: Color) -> Self {
-        if let Element::Rect { hover_color, .. } = &mut self {
-            *hover_color = Some(color);
-        }
-        self
-    }
-
-    pub fn on_click(mut self, f: impl FnMut(&mut A) + 'static) -> Self {
-        match &mut self {
-            Element::Rect { callbacks, .. } => callbacks.on_click = Some(Box::new(f)),
-            Element::Button { on_click, .. } => *on_click = Some(Box::new(f)),
-            _ => {}
-        }
-        self
-    }
-
-    pub fn on_hover(mut self, f: impl FnMut(&mut A) + 'static) -> Self {
-        if let Element::Rect { callbacks, .. } = &mut self {
-            callbacks.on_hover = Some(Box::new(f));
-        }
-        self
-    }
-
-    pub fn just_hovered(mut self, f: impl FnMut(&mut A) + 'static) -> Self {
-        if let Element::Rect { callbacks, .. } = &mut self {
-            callbacks.on_just_hovered = Some(Box::new(f));
-        }
-        self
-    }
-
-    pub fn just_unhovered(mut self, f: impl FnMut(&mut A) + 'static) -> Self {
-        if let Element::Rect { callbacks, .. } = &mut self {
-            callbacks.on_just_unhovered = Some(Box::new(f));
+        if let Some(st) = self.style_mut() {
+            st.align_y = a;
         }
         self
     }
 }
 
-pub fn rect<A>(w: f32, h: f32, color: Color) -> Element<A> {
-    Element::Rect { w, h, color, hover_color: None, style: Style::new(), callbacks: Callbacks::none() }
+pub fn rect(w: f32, h: f32, color: Color) -> Element {
+    Element::Rect {
+        w,
+        h,
+        color,
+        style: Style::new(),
+        callbacks: Callbacks::none(),
+    }
 }
 
-pub fn text<A>(content: &str, color: Color) -> Element<A> {
-    Element::Text { content: content.to_string(), color, style: Style::new() }
+pub fn text(content: &str, color: Color) -> Element {
+    Element::Text {
+        content: content.to_string(),
+        color,
+        style: Style::new(),
+    }
 }
 
-pub fn button<A>(label: &str, w: f32, h: f32, color: Color) -> Element<A> {
-    Element::Button { label: label.to_string(), w, h, btn_style: ButtonStyle::new(color), style: Style::new(), on_click: None }
-}
-
-pub fn container<A>(color: Color, child: Element<A>) -> Element<A> {
-    Element::Container { color, style: Style::new(), child: Box::new(child) }
-}
-
-pub fn row<A>(children: Vec<Element<A>>) -> Element<A> {
-    Element::Row { gap: 0.0, style: Style::new(), children }
-}
-
-pub fn column<A>(children: Vec<Element<A>>) -> Element<A> {
-    Element::Column { gap: 0.0, style: Style::new(), children }
-}
-
-pub fn overlay<A>(children: Vec<Element<A>>) -> Element<A> {
-    Element::Overlay { style: Style::new(), children }
-}
-
-pub fn scroll<A>(height: f32, child: Element<A>) -> Element<A> {
-    Element::Scroll { scroll_height: height, scroll_y: 0.0, style: Style::new(), child: Box::new(child) }
-}
-
-pub fn empty<A>() -> Element<A> { Element::Empty }
-
-pub struct LayoutNode<A> {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-    pub kind: LayoutKind<A>,
-}
-
-pub enum LayoutKind<A> {
-    Rect    { color: Color, hover_color: Option<Color>, hovered: bool, callbacks: Callbacks<A> },
-    Text    { content: String, color: Color },
-    Button  { label: String, btn_style: ButtonStyle, on_click: Option<Box<dyn FnMut(&mut A)>>, hovered: bool },
-    Container { color: Color, child: Box<LayoutNode<A>> },
-    Scroll  { child: Box<LayoutNode<A>>, clip_h: f32 },
-    Children(Vec<LayoutNode<A>>),
-    Empty,
+pub fn empty() -> Element {
+    Element::Empty
 }
