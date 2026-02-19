@@ -1,36 +1,13 @@
 use crate::Color;
 
-pub struct ButtonStyle {
-    pub color: Color,
-    pub hover_color: Color,
-    pub text_color: Color,
-    pub corner_radius: f32,
+#[derive(Clone, Copy, PartialEq)]
+pub enum Align {
+    Start,
+    Center,
+    End,
 }
 
-impl Default for ButtonStyle {
-    fn default() -> Self {
-        Self {
-            color: Color::rgb(0.2, 0.2, 0.8),
-            hover_color: Color::rgb(0.3, 0.3, 1.0),
-            text_color: Color::WHITE,
-            corner_radius: 4.0,
-        }
-    }
-}
-
-pub struct Callbacks<A> {
-    pub on_click: Option<Box<dyn FnMut(&mut A)>>,
-    pub on_hover: Option<Box<dyn FnMut(&mut A)>>,
-    pub on_just_hovered: Option<Box<dyn FnMut(&mut A)>>,
-    pub on_just_unhovered: Option<Box<dyn FnMut(&mut A)>>,
-}
-
-impl<A> Callbacks<A> {
-    fn none() -> Self {
-        Self { on_click: None, on_hover: None, on_just_hovered: None, on_just_unhovered: None }
-    }
-}
-
+#[derive(Clone, Copy)]
 pub struct Padding {
     pub top: f32,
     pub right: f32,
@@ -48,6 +25,7 @@ impl Padding {
     pub fn right(v: f32) -> Self { Self { top: 0.0, right: v, bottom: 0.0, left: 0.0 } }
 }
 
+#[derive(Clone)]
 pub enum Size {
     Fixed(f32),
     Fill,
@@ -60,12 +38,64 @@ impl Size {
     pub fn percent(v: f32) -> Self { Size::Percent(v) }
 }
 
-impl Default for Size {
-    fn default() -> Self { Size::Fixed(0.0) }
+#[derive(Clone, Default)]
+pub struct Style {
+    pub width: Option<Size>,
+    pub height: Option<Size>,
+    pub min_width: Option<f32>,
+    pub max_width: Option<f32>,
+    pub min_height: Option<f32>,
+    pub max_height: Option<f32>,
+    pub padding: Padding,
+    pub align_x: Align,
+    pub align_y: Align,
+}
+
+impl Default for Align {
+    fn default() -> Self { Align::Start }
 }
 
 impl Default for Padding {
     fn default() -> Self { Self::all(0.0) }
+}
+
+impl Style {
+    pub fn new() -> Self { Self::default() }
+}
+
+pub struct Callbacks<A> {
+    pub on_click:         Option<Box<dyn FnMut(&mut A)>>,
+    pub on_hover:         Option<Box<dyn FnMut(&mut A)>>,
+    pub on_just_hovered:  Option<Box<dyn FnMut(&mut A)>>,
+    pub on_just_unhovered:Option<Box<dyn FnMut(&mut A)>>,
+}
+
+impl<A> Callbacks<A> {
+    pub fn none() -> Self {
+        Self { on_click: None, on_hover: None, on_just_hovered: None, on_just_unhovered: None }
+    }
+}
+
+pub struct ButtonStyle {
+    pub color: Color,
+    pub hover_color: Color,
+    pub text_color: Color,
+    pub corner_radius: f32,
+}
+
+impl ButtonStyle {
+    pub fn new(color: Color) -> Self {
+        Self {
+            hover_color: Color::rgb(
+                (color.r + 0.1).min(1.0),
+                (color.g + 0.1).min(1.0),
+                (color.b + 0.1).min(1.0),
+            ),
+            color,
+            text_color: Color::WHITE,
+            corner_radius: 4.0,
+        }
+    }
 }
 
 pub enum Element<A> {
@@ -74,68 +104,107 @@ pub enum Element<A> {
         h: f32,
         color: Color,
         hover_color: Option<Color>,
-        padding: Padding,
-        width: Option<Size>,
-        height: Option<Size>,
+        style: Style,
         callbacks: Callbacks<A>,
     },
     Text {
         content: String,
         color: Color,
-        padding: Padding,
-        width: Option<Size>,
+        style: Style,
     },
     Button {
         label: String,
         w: f32,
         h: f32,
-        style: ButtonStyle,
-        padding: Padding,
-        width: Option<Size>,
+        btn_style: ButtonStyle,
+        style: Style,
         on_click: Option<Box<dyn FnMut(&mut A)>>,
     },
     Container {
         color: Color,
-        padding: Padding,
-        width: Option<Size>,
-        height: Option<Size>,
+        style: Style,
         child: Box<Element<A>>,
     },
     Row {
         gap: f32,
-        padding: Padding,
-        width: Option<Size>,
+        style: Style,
         children: Vec<Element<A>>,
     },
     Column {
         gap: f32,
-        padding: Padding,
-        width: Option<Size>,
+        style: Style,
         children: Vec<Element<A>>,
+    },
+    Overlay {
+        style: Style,
+        children: Vec<Element<A>>,
+    },
+    Scroll {
+        scroll_height: f32,
+        scroll_y: f32,
+        style: Style,
+        child: Box<Element<A>>,
     },
     Empty,
 }
 
 impl<A: 'static> Element<A> {
-    pub fn width(mut self, s: Size) -> Self {
-        match &mut self {
-            Element::Rect { width, .. } => *width = Some(s),
-            Element::Text { width, .. } => *width = Some(s),
-            Element::Button { width, .. } => *width = Some(s),
-            Element::Container { width, .. } => *width = Some(s),
-            Element::Row { width, .. } => *width = Some(s),
-            Element::Column { width, .. } => *width = Some(s),
-            _ => {}
+    fn style_mut(&mut self) -> Option<&mut Style> {
+        match self {
+            Element::Rect { style, .. } => Some(style),
+            Element::Text { style, .. } => Some(style),
+            Element::Button { style, .. } => Some(style),
+            Element::Container { style, .. } => Some(style),
+            Element::Row { style, .. } => Some(style),
+            Element::Column { style, .. } => Some(style),
+            Element::Overlay { style, .. } => Some(style),
+            Element::Scroll { style, .. } => Some(style),
+            Element::Empty => None,
         }
+    }
+
+    pub fn width(mut self, s: Size) -> Self {
+        if let Some(st) = self.style_mut() { st.width = Some(s); }
         self
     }
 
     pub fn height(mut self, s: Size) -> Self {
-        match &mut self {
-            Element::Rect { height, .. } => *height = Some(s),
-            Element::Container { height, .. } => *height = Some(s),
-            _ => {}
-        }
+        if let Some(st) = self.style_mut() { st.height = Some(s); }
+        self
+    }
+
+    pub fn min_width(mut self, v: f32) -> Self {
+        if let Some(st) = self.style_mut() { st.min_width = Some(v); }
+        self
+    }
+
+    pub fn max_width(mut self, v: f32) -> Self {
+        if let Some(st) = self.style_mut() { st.max_width = Some(v); }
+        self
+    }
+
+    pub fn min_height(mut self, v: f32) -> Self {
+        if let Some(st) = self.style_mut() { st.min_height = Some(v); }
+        self
+    }
+
+    pub fn max_height(mut self, v: f32) -> Self {
+        if let Some(st) = self.style_mut() { st.max_height = Some(v); }
+        self
+    }
+
+    pub fn padding(mut self, p: Padding) -> Self {
+        if let Some(st) = self.style_mut() { st.padding = p; }
+        self
+    }
+
+    pub fn align_x(mut self, a: Align) -> Self {
+        if let Some(st) = self.style_mut() { st.align_x = a; }
+        self
+    }
+
+    pub fn align_y(mut self, a: Align) -> Self {
+        if let Some(st) = self.style_mut() { st.align_y = a; }
         self
     }
 
@@ -143,18 +212,6 @@ impl<A: 'static> Element<A> {
         match &mut self {
             Element::Row { gap: g, .. } => *g = gap,
             Element::Column { gap: g, .. } => *g = gap,
-            _ => {}
-        }
-        self
-    }
-
-    pub fn padding(mut self, p: Padding) -> Self {
-        match &mut self {
-            Element::Rect { padding, .. } => *padding = p,
-            Element::Text { padding, .. } => *padding = p,
-            Element::Button { padding, .. } => *padding = p,
-            Element::Container { padding, .. } => *padding = p,
-            Element::Column { padding, .. } => *padding = p,
             _ => {}
         }
         self
@@ -196,53 +253,41 @@ impl<A: 'static> Element<A> {
         }
         self
     }
-
-    pub fn style(mut self, style: ButtonStyle) -> Self {
-        if let Element::Button { style: s, .. } = &mut self {
-            *s = style;
-        }
-        self
-    }
 }
-
-pub fn container<A>(color: Color, child: Element<A>) -> Element<A> {
-    Element::Container { color, padding: Padding::default(), width: None, height: None, child: Box::new(child) }
-}
-
-pub fn empty<A>() -> Element<A> { Element::Empty }
 
 pub fn rect<A>(w: f32, h: f32, color: Color) -> Element<A> {
-    Element::Rect { w, h, color, hover_color: None, padding: Padding::default(), width: None, height: None, callbacks: Callbacks::none() }
+    Element::Rect { w, h, color, hover_color: None, style: Style::new(), callbacks: Callbacks::none() }
 }
 
 pub fn text<A>(content: &str, color: Color) -> Element<A> {
-    Element::Text { content: content.to_string(), color, padding: Padding::default(), width: None }
+    Element::Text { content: content.to_string(), color, style: Style::new() }
 }
 
 pub fn button<A>(label: &str, w: f32, h: f32, color: Color) -> Element<A> {
-    let hover_color = Color::rgb(
-        (color.r + 0.1).min(1.0),
-        (color.g + 0.1).min(1.0),
-        (color.b + 0.1).min(1.0),
-    );
-    Element::Button {
-        label: label.to_string(),
-        w,
-        h,
-        style: ButtonStyle { color, hover_color, ..ButtonStyle::default() },
-        padding: Padding::default(),
-        width: None,
-        on_click: None,
-    }
+    Element::Button { label: label.to_string(), w, h, btn_style: ButtonStyle::new(color), style: Style::new(), on_click: None }
+}
+
+pub fn container<A>(color: Color, child: Element<A>) -> Element<A> {
+    Element::Container { color, style: Style::new(), child: Box::new(child) }
 }
 
 pub fn row<A>(children: Vec<Element<A>>) -> Element<A> {
-    Element::Row { gap: 0.0, padding: Padding::default(), width: None, children }
+    Element::Row { gap: 0.0, style: Style::new(), children }
 }
 
 pub fn column<A>(children: Vec<Element<A>>) -> Element<A> {
-    Element::Column { gap: 0.0, padding: Padding::default(), width: None, children }
+    Element::Column { gap: 0.0, style: Style::new(), children }
 }
+
+pub fn overlay<A>(children: Vec<Element<A>>) -> Element<A> {
+    Element::Overlay { style: Style::new(), children }
+}
+
+pub fn scroll<A>(height: f32, child: Element<A>) -> Element<A> {
+    Element::Scroll { scroll_height: height, scroll_y: 0.0, style: Style::new(), child: Box::new(child) }
+}
+
+pub fn empty<A>() -> Element<A> { Element::Empty }
 
 pub struct LayoutNode<A> {
     pub x: f32,
@@ -253,10 +298,11 @@ pub struct LayoutNode<A> {
 }
 
 pub enum LayoutKind<A> {
-    Rect { color: Color, hover_color: Option<Color>, hovered: bool, callbacks: Callbacks<A> },
-    Text { content: String, color: Color },
-    Button { label: String, style: ButtonStyle, on_click: Option<Box<dyn FnMut(&mut A)>>, hovered: bool },
+    Rect    { color: Color, hover_color: Option<Color>, hovered: bool, callbacks: Callbacks<A> },
+    Text    { content: String, color: Color },
+    Button  { label: String, btn_style: ButtonStyle, on_click: Option<Box<dyn FnMut(&mut A)>>, hovered: bool },
     Container { color: Color, child: Box<LayoutNode<A>> },
+    Scroll  { child: Box<LayoutNode<A>>, clip_h: f32 },
     Children(Vec<LayoutNode<A>>),
     Empty,
 }

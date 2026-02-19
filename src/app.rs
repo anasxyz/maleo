@@ -10,8 +10,8 @@ use winit::{
 };
 
 use crate::{
-    Color, Element, Events, Fonts, GpuContext, LayoutKind, LayoutNode, ShapeRenderer, Size,
-    TextRenderer,
+    Align, Color, Element, Events, Fonts, GpuContext, LayoutKind, LayoutNode, ShapeRenderer, Size,
+    Style, TextRenderer,
 };
 
 pub trait App: 'static + Sized {
@@ -80,17 +80,17 @@ impl<A: App> Runner<A> {
         )
     }
 
-    fn on_resize(&mut self, width: f32, height: f32) {
+    fn on_resize(&mut self, w: f32, h: f32) {
         if let Some(tr) = self.text_renderer.as_mut() {
-            tr.resize(width, height, self.scale_factor);
+            tr.resize(w, h, self.scale_factor);
         }
         if let Some(sr) = self.shape_renderer.as_mut() {
-            sr.resize(width, height);
+            sr.resize(w, h);
         }
     }
 
-    fn resolve_size(s: &Option<Size>, natural: f32, avail: f32) -> f32 {
-        match s {
+    fn resolve(size: &Option<Size>, natural: f32, avail: f32) -> f32 {
+        match size {
             None => natural,
             Some(Size::Fixed(v)) => *v,
             Some(Size::Fill) => avail,
@@ -98,90 +98,115 @@ impl<A: App> Runner<A> {
         }
     }
 
-    fn is_fill(s: &Option<Size>) -> bool {
-        matches!(s, Some(Size::Fill))
+    fn clamp(v: f32, min: Option<f32>, max: Option<f32>) -> f32 {
+        let v = min.map_or(v, |m| v.max(m));
+        let v = max.map_or(v, |m| v.min(m));
+        v
     }
 
-    fn child_is_fill_w(element: &Element<A>) -> bool {
-        match element {
-            Element::Rect { width, .. } => Self::is_fill(width),
-            Element::Text { width, .. } => Self::is_fill(width),
-            Element::Button { width, .. } => Self::is_fill(width),
-            Element::Container { width, .. } => Self::is_fill(width),
-            Element::Row { width, .. } => Self::is_fill(width),
-            Element::Column { width, .. } => Self::is_fill(width),
-            _ => false,
+    fn align_offset(align: Align, container: f32, child: f32) -> f32 {
+        match align {
+            Align::Start => 0.0,
+            Align::Center => ((container - child) / 2.0).max(0.0),
+            Align::End => (container - child).max(0.0),
         }
     }
 
-    fn layout_measure(&mut self, element: &Element<A>, avail_w: f32, avail_h: f32) -> (f32, f32) {
+    fn is_fill_w(element: &Element<A>) -> bool {
+        let width = match element {
+            Element::Rect { style, .. } => &style.width,
+            Element::Text { style, .. } => &style.width,
+            Element::Button { style, .. } => &style.width,
+            Element::Container { style, .. } => &style.width,
+            Element::Row { style, .. } => &style.width,
+            Element::Column { style, .. } => &style.width,
+            Element::Overlay { style, .. } => &style.width,
+            Element::Scroll { style, .. } => &style.width,
+            Element::Empty => return false,
+        };
+        matches!(width, Some(Size::Fill))
+    }
+
+    fn measure(&mut self, element: &Element<A>, avail_w: f32, avail_h: f32) -> (f32, f32) {
         match element {
-            Element::Rect {
-                w,
-                h,
-                padding: p,
-                width,
-                height,
-                ..
-            } => {
-                let w = Self::resolve_size(width, *w, avail_w - p.left - p.right);
-                let h = Self::resolve_size(height, *h, avail_h - p.top - p.bottom);
-                (w + p.left + p.right, h + p.top + p.bottom)
+            Element::Rect { w, h, style, .. } => {
+                let w = Self::resolve(&style.width, *w, avail_w);
+                let h = Self::resolve(&style.height, *h, avail_h);
+                let w = Self::clamp(w, style.min_width, style.max_width)
+                    + style.padding.left
+                    + style.padding.right;
+                let h = Self::clamp(h, style.min_height, style.max_height)
+                    + style.padding.top
+                    + style.padding.bottom;
+                (w, h)
             }
-            Element::Text {
-                content,
-                padding: p,
-                width,
-                ..
-            } => {
+            Element::Text { content, style, .. } => {
                 let fonts = self.fonts.as_mut().unwrap();
                 let font = fonts.default();
                 let (tw, th) = fonts.measure(content, font);
-                let w = Self::resolve_size(width, tw, avail_w - p.left - p.right);
-                (w + p.left + p.right, th + p.top + p.bottom)
+                let w = Self::resolve(&style.width, tw, avail_w);
+                let w = Self::clamp(w, style.min_width, style.max_width)
+                    + style.padding.left
+                    + style.padding.right;
+                (w, th + style.padding.top + style.padding.bottom)
             }
-            Element::Button {
-                w,
-                h,
-                padding: p,
-                width,
-                ..
-            } => {
-                let w = Self::resolve_size(width, *w, avail_w - p.left - p.right);
-                (w + p.left + p.right, *h + p.top + p.bottom)
+            Element::Button { w, h, style, .. } => {
+                let w = Self::resolve(&style.width, *w, avail_w);
+                let w = Self::clamp(w, style.min_width, style.max_width)
+                    + style.padding.left
+                    + style.padding.right;
+                let h = Self::clamp(*h, style.min_height, style.max_height)
+                    + style.padding.top
+                    + style.padding.bottom;
+                (w, h)
             }
-            Element::Container {
-                padding: p,
-                width,
-                child,
-                ..
-            } => {
-                let inner_avail_w = avail_w - p.left - p.right;
-                let (cw, ch) =
-                    self.layout_measure(child, inner_avail_w, avail_h - p.top - p.bottom);
-                let w = Self::resolve_size(width, cw + p.left + p.right, avail_w);
-                (w, ch + p.top + p.bottom)
+            Element::Container { style, child, .. } => {
+                let iw = avail_w - style.padding.left - style.padding.right;
+                let ih = avail_h - style.padding.top - style.padding.bottom;
+                let (cw, ch) = self.measure(child, iw, ih);
+                let w = Self::resolve(
+                    &style.width,
+                    cw + style.padding.left + style.padding.right,
+                    avail_w,
+                );
+                let h = Self::resolve(
+                    &style.height,
+                    ch + style.padding.top + style.padding.bottom,
+                    avail_h,
+                );
+                (
+                    Self::clamp(w, style.min_width, style.max_width),
+                    Self::clamp(h, style.min_height, style.max_height),
+                )
             }
             Element::Column {
                 gap,
-                padding: p,
-                width,
+                style,
                 children,
                 ..
             } => {
-                let inner_avail_w = avail_w - p.left - p.right;
+                let iw = avail_w - style.padding.left - style.padding.right;
                 let mut max_w = 0.0f32;
                 let mut total_h = 0.0f32;
                 for (i, child) in children.iter().enumerate() {
-                    let (cw, ch) = self.layout_measure(child, inner_avail_w, avail_h);
+                    let (cw, ch) = self.measure(child, iw, avail_h);
                     max_w = max_w.max(cw);
                     total_h += ch;
                     if i < children.len() - 1 {
                         total_h += gap;
                     }
                 }
-                let w = Self::resolve_size(width, max_w + p.left + p.right, avail_w);
-                (w, total_h + p.top + p.bottom)
+                let w = Self::resolve(
+                    &style.width,
+                    max_w + style.padding.left + style.padding.right,
+                    avail_w,
+                );
+                let h = Self::resolve(
+                    &style.height,
+                    total_h + style.padding.top + style.padding.bottom,
+                    avail_h,
+                );
+                (Self::clamp(w, style.min_width, style.max_width), h)
             }
             Element::Empty => (0.0, 0.0),
             _ => (avail_w, avail_h),
@@ -202,13 +227,20 @@ impl<A: App> Runner<A> {
                 h,
                 color,
                 hover_color,
-                padding: p,
-                width,
-                height,
+                style,
                 callbacks,
             } => {
-                let w = Self::resolve_size(&width, w, avail_w - p.left - p.right);
-                let h = Self::resolve_size(&height, h, avail_h - p.top - p.bottom);
+                let p = &style.padding;
+                let w = Self::clamp(
+                    Self::resolve(&style.width, w, avail_w - p.left - p.right),
+                    style.min_width,
+                    style.max_width,
+                );
+                let h = Self::clamp(
+                    Self::resolve(&style.height, h, avail_h - p.top - p.bottom),
+                    style.min_height,
+                    style.max_height,
+                );
                 LayoutNode {
                     x: x + p.left,
                     y: y + p.top,
@@ -222,16 +254,21 @@ impl<A: App> Runner<A> {
                     },
                 }
             }
+
             Element::Text {
                 content,
                 color,
-                padding: p,
-                width,
+                style,
             } => {
+                let p = &style.padding;
                 let fonts = self.fonts.as_mut().unwrap();
                 let font = fonts.default();
                 let (tw, th) = fonts.measure(&content, font);
-                let w = Self::resolve_size(&width, tw, avail_w - p.left - p.right);
+                let w = Self::clamp(
+                    Self::resolve(&style.width, tw, avail_w - p.left - p.right),
+                    style.min_width,
+                    style.max_width,
+                );
                 LayoutNode {
                     x: x + p.left,
                     y: y + p.top,
@@ -240,16 +277,26 @@ impl<A: App> Runner<A> {
                     kind: LayoutKind::Text { content, color },
                 }
             }
+
             Element::Button {
                 label,
                 w,
                 h,
+                btn_style,
                 style,
-                padding: p,
-                width,
                 on_click,
             } => {
-                let w = Self::resolve_size(&width, w, avail_w - p.left - p.right);
+                let p = &style.padding;
+                let w = Self::clamp(
+                    Self::resolve(&style.width, w, avail_w - p.left - p.right),
+                    style.min_width,
+                    style.max_width,
+                );
+                let h = Self::clamp(
+                    Self::resolve(&style.height, h, avail_h - p.top - p.bottom),
+                    style.min_height,
+                    style.max_height,
+                );
                 LayoutNode {
                     x: x + p.left,
                     y: y + p.top,
@@ -257,31 +304,33 @@ impl<A: App> Runner<A> {
                     h,
                     kind: LayoutKind::Button {
                         label,
-                        style,
+                        btn_style,
                         on_click,
                         hovered: false,
                     },
                 }
             }
+
             Element::Row {
                 gap,
-                padding: p,
-                width,
+                style,
                 children,
             } => {
-                let inner_avail_w = Self::resolve_size(&width, avail_w, avail_w) - p.left - p.right;
-                let inner_avail_h = avail_h - p.top - p.bottom;
+                let p = style.padding;
+                let inner_avail_w =
+                    Self::resolve(&style.width, avail_w, avail_w) - p.left - p.right;
+                let inner_avail_h =
+                    Self::resolve(&style.height, avail_h, avail_h) - p.top - p.bottom;
                 let n = children.len();
 
-                // first pass is measure fixed children, count fill children
+                // first pass
                 let mut fixed_w = if n > 0 { gap * (n as f32 - 1.0) } else { 0.0 };
                 let mut fill_count = 0usize;
                 for child in &children {
-                    if Self::child_is_fill_w(child) {
+                    if Self::is_fill_w(child) {
                         fill_count += 1;
                     } else {
-                        let node = self.layout_measure(child, inner_avail_w, inner_avail_h);
-                        fixed_w += node.0;
+                        fixed_w += self.measure(child, inner_avail_w, inner_avail_h).0;
                     }
                 }
                 let fill_w = if fill_count > 0 {
@@ -290,12 +339,12 @@ impl<A: App> Runner<A> {
                     0.0
                 };
 
-                // second pass is layout with resolved widths
+                // second pass
                 let mut cursor_x = x + p.left;
                 let mut max_h = 0.0f32;
                 let mut nodes = Vec::with_capacity(n);
                 for child in children {
-                    let child_avail = if Self::child_is_fill_w(&child) {
+                    let child_avail = if Self::is_fill_w(&child) {
                         fill_w
                     } else {
                         inner_avail_w
@@ -305,8 +354,22 @@ impl<A: App> Runner<A> {
                     max_h = max_h.max(node.h);
                     nodes.push(node);
                 }
-                let w = Self::resolve_size(&width, cursor_x - x - gap + p.right, avail_w);
-                let h = max_h + p.top + p.bottom;
+
+                let raw_w = cursor_x - x - gap + p.right;
+                let raw_h = max_h + p.top + p.bottom;
+                let w = Self::clamp(
+                    Self::resolve(&style.width, raw_w, avail_w),
+                    style.min_width,
+                    style.max_width,
+                );
+                let h = Self::resolve(&style.height, raw_h, avail_h);
+
+                if style.align_y != Align::Start {
+                    for node in &mut nodes {
+                        node.y += Self::align_offset(style.align_y, h - p.top - p.bottom, node.h);
+                    }
+                }
+
                 LayoutNode {
                     x,
                     y,
@@ -315,13 +378,15 @@ impl<A: App> Runner<A> {
                     kind: LayoutKind::Children(nodes),
                 }
             }
+
             Element::Column {
                 gap,
-                padding: p,
-                width,
+                style,
                 children,
             } => {
-                let inner_avail_w = Self::resolve_size(&width, avail_w, avail_w) - p.left - p.right;
+                let p = style.padding;
+                let inner_avail_w =
+                    Self::resolve(&style.width, avail_w, avail_w) - p.left - p.right;
                 let n = children.len();
 
                 let mut cursor_y = y + p.top;
@@ -333,8 +398,22 @@ impl<A: App> Runner<A> {
                     max_w = max_w.max(node.w);
                     nodes.push(node);
                 }
-                let w = Self::resolve_size(&width, max_w + p.left + p.right, avail_w);
-                let h = cursor_y - y + p.bottom;
+
+                let raw_w = max_w + p.left + p.right;
+                let raw_h = cursor_y - y + p.bottom;
+                let w = Self::clamp(
+                    Self::resolve(&style.width, raw_w, avail_w),
+                    style.min_width,
+                    style.max_width,
+                );
+                let h = Self::resolve(&style.height, raw_h, avail_h);
+
+                if style.align_x != Align::Start {
+                    for node in &mut nodes {
+                        node.x += Self::align_offset(style.align_x, w - p.left - p.right, node.w);
+                    }
+                }
+
                 LayoutNode {
                     x,
                     y,
@@ -343,22 +422,38 @@ impl<A: App> Runner<A> {
                     kind: LayoutKind::Children(nodes),
                 }
             }
+
             Element::Container {
                 color,
-                padding: p,
-                width,
-                height,
+                style,
                 child,
             } => {
-                let inner_avail_w = Self::resolve_size(&width, avail_w, avail_w) - p.left - p.right;
-                let inner = self.layout(*child, x + p.left, y + p.top, inner_avail_w, avail_h);
-                let w = Self::resolve_size(&width, inner.w + p.left + p.right, avail_w);
-                let h = match &height {
-                    None => inner.h + p.top + p.bottom,
-                    Some(Size::Fill) => avail_h,
-                    Some(Size::Fixed(v)) => *v,
-                    Some(Size::Percent(pct)) => avail_h * pct / 100.0,
-                };
+                let p = style.padding;
+                let inner_avail_w =
+                    Self::resolve(&style.width, avail_w, avail_w) - p.left - p.right;
+                let inner_avail_h =
+                    Self::resolve(&style.height, avail_h, avail_h) - p.top - p.bottom;
+                let mut inner =
+                    self.layout(*child, x + p.left, y + p.top, inner_avail_w, inner_avail_h);
+                let raw_w = inner.w + p.left + p.right;
+                let raw_h = inner.h + p.top + p.bottom;
+                let w = Self::clamp(
+                    Self::resolve(&style.width, raw_w, avail_w),
+                    style.min_width,
+                    style.max_width,
+                );
+                let h = Self::clamp(
+                    match &style.height {
+                        None => raw_h,
+                        Some(Size::Fill) => avail_h,
+                        Some(Size::Fixed(v)) => *v,
+                        Some(Size::Percent(p)) => avail_h * p / 100.0,
+                    },
+                    style.min_height,
+                    style.max_height,
+                );
+                inner.x += Self::align_offset(style.align_x, w - p.left - p.right, inner.w);
+                inner.y += Self::align_offset(style.align_y, h - p.top - p.bottom, inner.h);
                 LayoutNode {
                     x,
                     y,
@@ -370,6 +465,43 @@ impl<A: App> Runner<A> {
                     },
                 }
             }
+
+            Element::Overlay { style, children } => {
+                let w = Self::resolve(&style.width, avail_w, avail_w);
+                let h = Self::resolve(&style.height, avail_h, avail_h);
+                let mut nodes = Vec::with_capacity(children.len());
+                for child in children {
+                    nodes.push(self.layout(child, x, y, w, h));
+                }
+                LayoutNode {
+                    x,
+                    y,
+                    w,
+                    h,
+                    kind: LayoutKind::Children(nodes),
+                }
+            }
+
+            Element::Scroll {
+                scroll_height,
+                scroll_y,
+                style,
+                child,
+            } => {
+                let w = Self::resolve(&style.width, avail_w, avail_w);
+                let inner = self.layout(*child, x, y - scroll_y, w, f32::INFINITY);
+                LayoutNode {
+                    x,
+                    y,
+                    w,
+                    h: scroll_height,
+                    kind: LayoutKind::Scroll {
+                        child: Box::new(inner),
+                        clip_h: scroll_height,
+                    },
+                }
+            }
+
             Element::Empty => LayoutNode {
                 x,
                 y,
@@ -442,7 +574,7 @@ impl<A: App> Runner<A> {
                     *hovered = false;
                 }
             }
-            LayoutKind::Container { child, .. } => {
+            LayoutKind::Container { child, .. } | LayoutKind::Scroll { child, .. } => {
                 Self::fire_callbacks(
                     app,
                     child,
@@ -472,11 +604,7 @@ impl<A: App> Runner<A> {
         }
     }
 
-    fn draw_layout(&mut self, node: &LayoutNode<A>) {
-        let sr = self.shape_renderer.as_mut().unwrap();
-        let tr = self.text_renderer.as_mut().unwrap();
-        let fonts = self.fonts.as_mut().unwrap();
-
+    fn draw(&mut self, node: &LayoutNode<A>) {
         match &node.kind {
             LayoutKind::Rect {
                 color,
@@ -489,14 +617,23 @@ impl<A: App> Runner<A> {
                 } else {
                     *color
                 };
-                sr.draw_rect(node.x, node.y, node.w, node.h, c.to_array(), [0.0; 4], 0.0);
+                self.shape_renderer.as_mut().unwrap().draw_rect(
+                    node.x,
+                    node.y,
+                    node.w,
+                    node.h,
+                    c.to_array(),
+                    [0.0; 4],
+                    0.0,
+                );
             }
             LayoutKind::Text { content, color } => {
+                let fonts = self.fonts.as_mut().unwrap();
                 let font = fonts.default();
                 let entry = fonts.get(font);
                 let family = entry.family.clone();
                 let size = entry.size;
-                tr.draw(
+                self.text_renderer.as_mut().unwrap().draw(
                     &mut fonts.font_system,
                     family,
                     size,
@@ -508,25 +645,26 @@ impl<A: App> Runner<A> {
             }
             LayoutKind::Button {
                 label,
-                style,
+                btn_style,
                 hovered,
                 ..
             } => {
                 let color = if *hovered {
-                    style.hover_color
+                    btn_style.hover_color
                 } else {
-                    style.color
+                    btn_style.color
                 };
-                sr.draw_rounded_rect(
+                self.shape_renderer.as_mut().unwrap().draw_rounded_rect(
                     node.x,
                     node.y,
                     node.w,
                     node.h,
-                    style.corner_radius,
+                    btn_style.corner_radius,
                     color.to_array(),
                     [0.0; 4],
                     0.0,
                 );
+                let fonts = self.fonts.as_mut().unwrap();
                 let font = fonts.default();
                 let entry = fonts.get(font);
                 let family = entry.family.clone();
@@ -534,18 +672,18 @@ impl<A: App> Runner<A> {
                 let (tw, th) = fonts.measure(label, font);
                 let tx = node.x + (node.w - tw) / 2.0;
                 let ty = node.y + (node.h - th) / 2.0;
-                tr.draw(
+                self.text_renderer.as_mut().unwrap().draw(
                     &mut fonts.font_system,
                     family,
                     size,
                     label,
                     tx,
                     ty,
-                    style.text_color,
+                    btn_style.text_color,
                 );
             }
             LayoutKind::Container { color, child } => {
-                sr.draw_rect(
+                self.shape_renderer.as_mut().unwrap().draw_rect(
                     node.x,
                     node.y,
                     node.w,
@@ -554,11 +692,14 @@ impl<A: App> Runner<A> {
                     [0.0; 4],
                     0.0,
                 );
-                self.draw_layout(child);
+                self.draw(child);
+            }
+            LayoutKind::Scroll { child, .. } => {
+                self.draw(child);
             }
             LayoutKind::Children(children) => {
                 for child in children {
-                    self.draw_layout(child);
+                    self.draw(child);
                 }
             }
             LayoutKind::Empty => {}
@@ -580,7 +721,7 @@ impl<A: App> Runner<A> {
         let mouse_x = self.events.mouse.x;
         let mouse_y = self.events.mouse.y;
         let clicked = self.events.mouse.left_just_pressed;
-        let mut hovered_this_frame = HashSet::new();
+        let mut hovered_this = HashSet::new();
         let mut index = 0;
         Self::fire_callbacks(
             &mut self.app,
@@ -589,29 +730,27 @@ impl<A: App> Runner<A> {
             mouse_y,
             clicked,
             &self.hovered_last_frame,
-            &mut hovered_this_frame,
+            &mut hovered_this,
             &mut index,
         );
-        self.hovered_last_frame = hovered_this_frame;
+        self.hovered_last_frame = hovered_this;
 
-        self.draw_layout(&layout);
+        self.draw(&layout);
 
         {
             let gpu = self.gpu.as_ref().unwrap();
+            let clear = self.app.clear_color();
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &msaa_view,
                     resolve_target: Some(&view),
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear({
-                            let c = self.app.clear_color();
-                            wgpu::Color {
-                                r: c.r as f64,
-                                g: c.g as f64,
-                                b: c.b as f64,
-                                a: 1.0,
-                            }
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: clear.r as f64,
+                            g: clear.g as f64,
+                            b: clear.b as f64,
+                            a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
                     },
