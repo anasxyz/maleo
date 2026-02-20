@@ -149,7 +149,7 @@ impl<A: App> Runner<A> {
             self.fonts.as_mut().unwrap(),
         );
         println!("Rendering...");
-        self.draw_element(&tree);
+        self.draw_element(&mut tree);
 
         {
             let gpu = self.gpu.as_ref().unwrap();
@@ -195,7 +195,7 @@ impl<A: App> Runner<A> {
         finisher.present(encoder, &self.gpu().queue);
     }
 
-    fn draw_element(&mut self, el: &Element) {
+    fn draw_element(&mut self, el: &mut Element) {
         match el {
             Element::Empty => {}
             Element::Rect {
@@ -234,6 +234,58 @@ impl<A: App> Runner<A> {
                     style.y,
                     *color,
                 );
+            }
+            Element::Button {
+                label,
+                style,
+                resolved_w,
+                resolved_h,
+                on_click,
+            } => {
+                let hovered = self.events.mouse.over(style.x, style.y, *resolved_w, *resolved_h);
+                let clicked = hovered && self.events.mouse.left_just_pressed;
+
+                let bg = if clicked {
+                    style.background.map(|c| Color::rgb(
+                        (c.r + 0.15).min(1.0),
+                        (c.g + 0.15).min(1.0),
+                        (c.b + 0.15).min(1.0),
+                    )).unwrap_or(Color::rgb(0.5, 0.5, 0.6))
+                } else if hovered {
+                    style.background.map(|c| Color::rgb(
+                        (c.r + 0.08).min(1.0),
+                        (c.g + 0.08).min(1.0),
+                        (c.b + 0.08).min(1.0),
+                    )).unwrap_or(Color::rgb(0.35, 0.35, 0.45))
+                } else {
+                    style.background.unwrap_or(Color::rgb(0.25, 0.25, 0.35))
+                };
+
+                self.shape_renderer.as_mut().unwrap().draw_rect(
+                    style.x, style.y, *resolved_w, *resolved_h,
+                    bg.to_array(), [0.0; 4], 0.0,
+                );
+
+                // draw label centered with fixed internal spacing
+                let fonts = self.fonts.as_mut().unwrap();
+                let font_id = fonts.default().unwrap();
+                let entry = fonts.get(font_id);
+                let family = entry.family.clone();
+                let size = entry.size;
+                let (tw, th) = fonts.measure(label, font_id);
+                let tx = style.x + (*resolved_w - tw) / 2.0;
+                let ty = style.y + (*resolved_h - th) / 2.0;
+                self.text_renderer.as_mut().unwrap().draw(
+                    &mut self.fonts.as_mut().unwrap().font_system,
+                    family, size, label, tx, ty,
+                    Color::rgb(0.92, 0.92, 0.95),
+                );
+
+                if clicked {
+                    if let Some(cb) = on_click {
+                        cb();
+                    }
+                }
             }
             Element::Row {
                 style,
@@ -286,8 +338,9 @@ fn child_width_sizing(element: &Element) -> Size {
         Element::Empty => Size::Fixed(0.0),
         Element::Rect { style, w, .. } => style.width.clone().unwrap_or(Size::Fixed(*w)),
         Element::Text { style, .. } => style.width.clone().unwrap_or(Size::Fixed(0.0)),
-        Element::Row { style, .. } => style.width.clone().unwrap_or(Size::Fill), // rows fill width by default
+        Element::Row { style, .. } => style.width.clone().unwrap_or(Size::Fill),
         Element::Column { style, .. } => style.width.clone().unwrap_or(Size::Fill),
+        Element::Button { style, .. } => style.width.clone().unwrap_or(Size::Fixed(0.0)),
     }
 }
 
@@ -296,8 +349,9 @@ fn child_height_sizing(element: &Element) -> Size {
         Element::Empty => Size::Fixed(0.0),
         Element::Rect { style, h, .. } => style.height.clone().unwrap_or(Size::Fixed(*h)),
         Element::Text { style, .. } => style.height.clone().unwrap_or(Size::Fixed(0.0)),
-        Element::Row { style, .. } => style.height.clone().unwrap_or(Size::Fixed(0.0)), // rows shrink to content height by default
+        Element::Row { style, .. } => style.height.clone().unwrap_or(Size::Fixed(0.0)),
         Element::Column { style, .. } => style.height.clone().unwrap_or(Size::Fixed(0.0)),
+        Element::Button { style, .. } => style.height.clone().unwrap_or(Size::Fixed(0.0)),
     }
 }
 
@@ -384,6 +438,21 @@ fn measure(element: &Element, fonts: &mut Fonts) -> (f32, f32) {
                 total_height + gap_total + style.padding.top + style.padding.bottom,
             )
         }
+        Element::Button { label, style, .. } => {
+            let font_id = fonts.default().unwrap();
+            let (tw, th) = fonts.measure(label, font_id);
+            let mw = match style.width.as_ref() {
+                Some(Size::Fill) | Some(Size::Percent(_)) => 0.0,
+                Some(Size::Fixed(v)) => *v,
+                None => tw + 24.0,
+            };
+            let mh = match style.height.as_ref() {
+                Some(Size::Fill) | Some(Size::Percent(_)) => 0.0,
+                Some(Size::Fixed(v)) => *v,
+                None => th + 12.0,
+            };
+            (mw + style.padding.left + style.padding.right, mh + style.padding.top + style.padding.bottom)
+        }
     }
 }
 
@@ -406,6 +475,20 @@ fn layout(
         Element::Text { style, .. } => {
             style.x = x + style.padding.left;
             style.y = y + style.padding.top;
+        }
+        Element::Button { style, resolved_w, resolved_h, .. } => {
+            style.x = x + style.padding.left;
+            style.y = y + style.padding.top;
+            *resolved_w = match style.width.as_ref() {
+                Some(Size::Fixed(v)) => *v,
+                Some(Size::Fill) | None => available_w - style.padding.left - style.padding.right,
+                Some(Size::Percent(p)) => (available_w - style.padding.left - style.padding.right) * p / 100.0,
+            };
+            *resolved_h = match style.height.as_ref() {
+                Some(Size::Fixed(v)) => *v,
+                Some(Size::Fill) | None => available_h - style.padding.top - style.padding.bottom,
+                Some(Size::Percent(p)) => (available_h - style.padding.top - style.padding.bottom) * p / 100.0,
+            };
         }
         Element::Row {
             style,

@@ -192,6 +192,13 @@ pub enum Element {
         resolved_w: f32,
         resolved_h: f32,
     },
+    Button {
+        label: String,
+        style: Style,
+        resolved_w: f32,
+        resolved_h: f32,
+        on_click: Option<Box<dyn FnMut()>>,
+    },
     Empty,
 }
 
@@ -202,6 +209,7 @@ impl Element {
             Element::Text { style, .. } => Some(style),
             Element::Row { style, .. } => Some(style),
             Element::Column { style, .. } => Some(style),
+            Element::Button { style, .. } => Some(style),
             Element::Empty => None,
         }
     }
@@ -283,6 +291,16 @@ impl Element {
         self
     }
 
+    pub fn on_click(mut self, f: impl FnMut() + 'static) -> Self {
+        if let Element::Button {
+            ref mut on_click, ..
+        } = self
+        {
+            *on_click = Some(Box::new(f));
+        }
+        self
+    }
+
     pub fn font(mut self, font_: Font) -> Self {
         if let Element::Text { ref mut font, .. } = self {
             *font = font_;
@@ -325,6 +343,16 @@ pub fn column(children: Vec<Element>) -> Element {
         children,
         resolved_w: 0.0,
         resolved_h: 0.0,
+    }
+}
+
+pub fn button(label: &str) -> Element {
+    Element::Button {
+        label: label.to_string(),
+        style: Style::new(),
+        resolved_w: 0.0,
+        resolved_h: 0.0,
+        on_click: None,
     }
 }
 
