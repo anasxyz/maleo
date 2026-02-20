@@ -10,7 +10,7 @@ use winit::{
 };
 
 use crate::{
-    Color, Element, Events, Font, FontId, Fonts, GpuContext, ShapeRenderer, Size, TextRenderer,
+    Align, Color, Element, Events, Font, FontId, Fonts, GpuContext, ShapeRenderer, Size, TextRenderer
 };
 
 pub struct Settings {
@@ -375,7 +375,6 @@ fn layout(
             style.x = x;
             style.y = y;
 
-            // resolve the row's own size first
             let self_w = match style.width.clone() {
                 Some(Size::Fill) => available_w,
                 Some(Size::Percent(p)) => available_w * p / 100.0,
@@ -412,8 +411,27 @@ fn layout(
                 0.0
             };
 
-            let mut cursor_x = x + style.padding.left;
-            let cursor_y = y + style.padding.top;
+            // horizontal alignment offset for Start/Center/End
+            let total_children_w: f32 = children
+                .iter()
+                .enumerate()
+                .map(|(i, child)| {
+                    let cw = match child_width_sizing(child) {
+                        Size::Fill => fill_width,
+                        Size::Percent(p) => inner_w * p / 100.0,
+                        Size::Fixed(_) => measure(child, fonts).0,
+                    };
+                    cw + if i < last { gap } else { 0.0 }
+                })
+                .sum();
+            let x_offset = match style.align_x {
+                Align::Start => 0.0,
+                Align::Center => (inner_w - total_children_w) / 2.0,
+                Align::End => inner_w - total_children_w,
+            };
+
+            let mut cursor_x = x + style.padding.left + x_offset;
+            let base_y = y + style.padding.top;
             for (i, child) in children.iter_mut().enumerate() {
                 let child_w = match child_width_sizing(child) {
                     Size::Fill => fill_width,
@@ -425,7 +443,13 @@ fn layout(
                     Size::Percent(p) => inner_h * p / 100.0,
                     Size::Fixed(_) => measure(child, fonts).1,
                 };
-                layout(child, cursor_x, cursor_y, child_w, child_h, fonts);
+                // vertical alignment of each child within the row
+                let child_y = match style.align_y {
+                    Align::Start => base_y,
+                    Align::Center => base_y + (inner_h - child_h) / 2.0,
+                    Align::End => base_y + inner_h - child_h,
+                };
+                layout(child, cursor_x, child_y, child_w, child_h, fonts);
                 cursor_x += child_w + if i < last { gap } else { 0.0 };
             }
         }
@@ -435,7 +459,6 @@ fn layout(
             style.x = x;
             style.y = y;
 
-            // resolve the column's own size first
             let self_w = match style.width.clone() {
                 Some(Size::Fill) => available_w,
                 Some(Size::Percent(p)) => available_w * p / 100.0,
@@ -472,8 +495,27 @@ fn layout(
                 0.0
             };
 
-            let cursor_x = x + style.padding.left;
-            let mut cursor_y = y + style.padding.top;
+            // vertical alignment offset for Start/Center/End
+            let total_children_h: f32 = children
+                .iter()
+                .enumerate()
+                .map(|(i, child)| {
+                    let ch = match child_height_sizing(child) {
+                        Size::Fill => fill_height,
+                        Size::Percent(p) => inner_h * p / 100.0,
+                        Size::Fixed(_) => measure(child, fonts).1,
+                    };
+                    ch + if i < last { gap } else { 0.0 }
+                })
+                .sum();
+            let y_offset = match style.align_y {
+                Align::Start => 0.0,
+                Align::Center => (inner_h - total_children_h) / 2.0,
+                Align::End => inner_h - total_children_h,
+            };
+
+            let base_x = x + style.padding.left;
+            let mut cursor_y = y + style.padding.top + y_offset;
             for (i, child) in children.iter_mut().enumerate() {
                 let child_w = match child_width_sizing(child) {
                     Size::Fill => inner_w,
@@ -485,7 +527,13 @@ fn layout(
                     Size::Percent(p) => inner_h * p / 100.0,
                     Size::Fixed(_) => measure(child, fonts).1,
                 };
-                layout(child, cursor_x, cursor_y, child_w, child_h, fonts);
+                // horizontal alignment of each child within the column
+                let child_x = match style.align_x {
+                    Align::Start => base_x,
+                    Align::Center => base_x + (inner_w - child_w) / 2.0,
+                    Align::End => base_x + inner_w - child_w,
+                };
+                layout(child, child_x, cursor_y, child_w, child_h, fonts);
                 cursor_y += child_h + if i < last { gap } else { 0.0 };
             }
         }

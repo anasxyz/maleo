@@ -33,7 +33,7 @@ impl App for MyApp {
             row(vec![
                 text("Hello", Color::WHITE),
                 text("World", Color::rgb(1.0, 0.0, 0.0)),
-            ]),
+            ]).width(Size::Fill).height(Size::Fill).align_x(Align::End).align_y(Align::Center),
         ])
         .width(Size::Fill)
         .height(Size::Fill)
