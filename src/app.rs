@@ -267,8 +267,13 @@ fn measure(element: &Element, fonts: &mut Fonts) -> (f32, f32) {
                 total_width += cw;
                 max_height = max_height.max(ch);
             }
+            let gap_total = if children.is_empty() {
+                0.0
+            } else {
+                style.gap * (children.len() - 1) as f32
+            };
             (
-                total_width + style.padding.left + style.padding.right,
+                total_width + gap_total + style.padding.left + style.padding.right,
                 max_height + style.padding.top + style.padding.bottom,
             )
         }
@@ -282,9 +287,14 @@ fn measure(element: &Element, fonts: &mut Fonts) -> (f32, f32) {
                 max_width = max_width.max(cw);
                 total_height += ch;
             }
+            let gap_total = if children.is_empty() {
+                0.0
+            } else {
+                style.gap * (children.len() - 1) as f32
+            };
             (
                 max_width + style.padding.left + style.padding.right,
-                total_height + style.padding.top + style.padding.bottom,
+                total_height + gap_total + style.padding.top + style.padding.bottom,
             )
         }
     }
@@ -308,10 +318,12 @@ fn layout(element: &mut Element, x: f32, y: f32, fonts: &mut Fonts) {
             style.y = y;
             let mut cursor_x = x + style.padding.left;
             let cursor_y = y + style.padding.top;
-            for child in children {
+            let gap = style.gap;
+            let last = children.len().saturating_sub(1);
+            for (i, child) in children.iter_mut().enumerate() {
                 let (cw, _) = measure(child, fonts);
                 layout(child, cursor_x, cursor_y, fonts);
-                cursor_x += cw;
+                cursor_x += cw + if i < last { gap } else { 0.0 };
             }
         }
         Element::Column {
@@ -321,10 +333,12 @@ fn layout(element: &mut Element, x: f32, y: f32, fonts: &mut Fonts) {
             style.y = y;
             let cursor_x = x + style.padding.left;
             let mut cursor_y = y + style.padding.top;
-            for child in children {
+            let gap = style.gap;
+            let last = children.len().saturating_sub(1);
+            for (i, child) in children.iter_mut().enumerate() {
                 let (_, ch) = measure(child, fonts);
                 layout(child, cursor_x, cursor_y, fonts);
-                cursor_y += ch;
+                cursor_y += ch + if i < last { gap } else { 0.0 };
             }
         }
     }

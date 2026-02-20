@@ -106,6 +106,7 @@ pub struct Style {
     pub padding: Padding,
     pub align_x: Align,
     pub align_y: Align,
+    pub gap: f32,
 }
 
 impl Default for Style {
@@ -122,6 +123,7 @@ impl Default for Style {
             padding: Padding::all(0.0),
             align_x: Align::Start,
             align_y: Align::Start,
+            gap: 0.0,
         }
     }
 }
@@ -261,11 +263,15 @@ impl Element {
         self
     }
 
+    pub fn gap(mut self, gap: f32) -> Self {
+        if let Some(st) = self.style_mut() {
+            st.gap = gap;
+        }
+        self
+    }
+
     pub fn font(mut self, font_: Font) -> Self {
-        if let Element::Text {
-            ref mut font, ..
-        } = self
-        {
+        if let Element::Text { ref mut font, .. } = self {
             *font = font_;
         }
         self
