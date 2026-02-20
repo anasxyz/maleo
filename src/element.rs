@@ -93,8 +93,10 @@ impl Size {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Style {
+    pub x: f32,
+    pub y: f32,
     pub width: Option<Size>,
     pub height: Option<Size>,
     pub min_width: Option<f32>,
@@ -104,6 +106,24 @@ pub struct Style {
     pub padding: Padding,
     pub align_x: Align,
     pub align_y: Align,
+}
+
+impl Default for Style {
+    fn default() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            width: None,
+            height: None,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            padding: Padding::all(0.0),
+            align_x: Align::Start,
+            align_y: Align::Start,
+        }
+    }
 }
 
 impl Default for Align {

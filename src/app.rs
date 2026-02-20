@@ -127,8 +127,6 @@ impl<A: App> Runner<A> {
     }
 
     fn render(&mut self) {
-        println!("Rendering...");
-
         let frame = match self.gpu_mut().begin_frame() {
             Ok(f) => f,
             Err(_) => return,
@@ -137,7 +135,10 @@ impl<A: App> Runner<A> {
         let (mut encoder, finisher, view, msaa_view) = frame.begin();
         let (width, height) = self.logical_size();
 
-        let tree = self.app.update(&self.events);
+        let mut tree = self.app.update(&self.events);
+        measure(&tree, self.fonts.as_mut().unwrap());
+        layout(&mut tree, 0.0, 0.0, self.fonts.as_mut().unwrap());
+        println!("Rendering...");
         self.draw_element(&tree);
 
         {
@@ -187,10 +188,12 @@ impl<A: App> Runner<A> {
     fn draw_element(&mut self, el: &Element) {
         match el {
             Element::Empty => {}
-            Element::Rect { w, h, color, .. } => {
+            Element::Rect {
+                w, h, color, style, ..
+            } => {
                 self.shape_renderer.as_mut().unwrap().draw_rect(
-                    0.0,
-                    0.0,
+                    style.x,
+                    style.y,
                     *w,
                     *h,
                     color.to_array(),
@@ -202,14 +205,11 @@ impl<A: App> Runner<A> {
                 content,
                 color,
                 font,
-                ..
+                style,
             } => {
                 let fonts = self.fonts.as_mut().unwrap();
                 let font_id = match font {
-                    Font::Name(name) => fonts.get_by_name(name).or_else(|| {
-                        println!("Font '{}' not found, using default", name);
-                        fonts.default()
-                    }),
+                    Font::Name(name) => fonts.get_by_name(name).or_else(|| fonts.default()),
                     Font::Default => fonts.default(),
                 };
                 let entry = fonts.get(font_id.unwrap());
@@ -220,22 +220,87 @@ impl<A: App> Runner<A> {
                     family,
                     size,
                     content,
-                    0.0,
-                    0.0,
+                    style.x,
+                    style.y,
                     *color,
                 );
             }
-            Element::Row { style, children } => {
-                let mut x = 0.0;
+            Element::Row { children, .. } | Element::Column { children, .. } => {
                 for child in children {
-                    self.draw_element(&child);
+                    self.draw_element(child);
                 }
             }
-            Element::Column { style, children } => {
-                let mut y = 0.0;
-                for child in children {
-                    self.draw_element(&child);
-                }
+        }
+    }
+}
+
+fn measure(element: &Element, fonts: &mut Fonts) -> (f32, f32) {
+    match element {
+        Element::Empty => (0.0, 0.0),
+        Element::Rect { w, h, .. } => (*w, *h),
+        Element::Text { content, font, .. } => {
+            let font_id = match font {
+                Font::Name(name) => fonts.get_by_name(name).or_else(|| fonts.default()),
+                Font::Default => fonts.default(),
+            };
+            fonts.measure(content, font_id.unwrap())
+        }
+        Element::Row { children, .. } => {
+            let mut total_width: f32 = 0.0;
+            let mut max_height: f32 = 0.0;
+            for child in children {
+                let (cw, ch) = measure(child, fonts);
+                total_width += cw;
+                max_height = max_height.max(ch);
+            }
+            (total_width, max_height)
+        }
+        Element::Column { children, .. } => {
+            let mut max_width: f32 = 0.0;
+            let mut total_height: f32 = 0.0;
+            for child in children {
+                let (cw, ch) = measure(child, fonts);
+                max_width = max_width.max(cw);
+                total_height += ch;
+            }
+            (max_width, total_height)
+        }
+    }
+}
+
+fn layout(element: &mut Element, x: f32, y: f32, fonts: &mut Fonts) {
+    match element {
+        Element::Empty => {}
+        Element::Rect { style, .. } => {
+            style.x = x;
+            style.y = y;
+        }
+        Element::Text { style, .. } => {
+            style.x = x;
+            style.y = y;
+        }
+        Element::Row {
+            style, children, ..
+        } => {
+            style.x = x;
+            style.y = y;
+            let mut cursor_x = x;
+            for child in children {
+                let (cw, _) = measure(child, fonts);
+                layout(child, cursor_x, y, fonts);
+                cursor_x += cw;
+            }
+        }
+        Element::Column {
+            style, children, ..
+        } => {
+            style.x = x;
+            style.y = y;
+            let mut cursor_y = y;
+            for child in children {
+                let (_, ch) = measure(child, fonts);
+                layout(child, x, cursor_y, fonts);
+                cursor_y += ch;
             }
         }
     }
