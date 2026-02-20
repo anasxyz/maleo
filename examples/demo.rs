@@ -18,13 +18,20 @@ impl App for MyApp {
     fn update(&mut self, events: &Events) -> Element {
         column(vec![
             row(vec![
+                rect(0.0, 0.0, Color::rgb(1.0, 0.0, 0.0))
+                    .width(Size::Percent(25.0))
+                    .height(Size::Fill),
+                rect(0.0, 0.0, Color::rgb(0.0, 1.0, 0.0))
+                    .width(Size::Percent(50.0))
+                    .height(Size::Fill),
+                rect(0.0, 0.0, Color::rgb(0.0, 0.0, 1.0))
+                    .width(Size::Percent(25.0))
+                    .height(Size::Fill),
+            ])
+            .height(Size::Fill),
+            row(vec![
                 text("Hello", Color::WHITE),
                 text("World", Color::rgb(1.0, 0.0, 0.0)),
-            ]),
-            rect(100.0, 100.0, Color::rgb(0.0, 0.0, 1.0)),
-            row(vec![
-                text("Second row", Color::rgb(0.0, 1.0, 0.0)),
-                text("Also second row", Color::WHITE),
             ]),
         ])
     }

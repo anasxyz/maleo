@@ -9,7 +9,9 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::{Color, Element, Events, Font, FontId, Fonts, GpuContext, ShapeRenderer, TextRenderer};
+use crate::{
+    Color, Element, Events, Font, FontId, Fonts, GpuContext, ShapeRenderer, Size, TextRenderer,
+};
 
 pub struct Settings {
     pub title: String,
@@ -137,7 +139,14 @@ impl<A: App> Runner<A> {
 
         let mut tree = self.app.update(&self.events);
         measure(&tree, self.fonts.as_mut().unwrap());
-        layout(&mut tree, 0.0, 0.0, self.fonts.as_mut().unwrap());
+        layout(
+            &mut tree,
+            0.0,
+            0.0,
+            width,
+            height,
+            self.fonts.as_mut().unwrap(),
+        );
         println!("Rendering...");
         self.draw_element(&tree);
 
@@ -234,13 +243,43 @@ impl<A: App> Runner<A> {
     }
 }
 
+fn child_width_sizing(element: &Element) -> Size {
+    match element {
+        Element::Empty => Size::Fixed(0.0),
+        Element::Rect { style, w, .. } => style.width.clone().unwrap_or(Size::Fixed(*w)),
+        Element::Text { style, .. } => style.width.clone().unwrap_or(Size::Fixed(0.0)),
+        Element::Row { style, .. } => style.width.clone().unwrap_or(Size::Fill), // rows fill width by default
+        Element::Column { style, .. } => style.width.clone().unwrap_or(Size::Fill),
+    }
+}
+
+fn child_height_sizing(element: &Element) -> Size {
+    match element {
+        Element::Empty => Size::Fixed(0.0),
+        Element::Rect { style, h, .. } => style.height.clone().unwrap_or(Size::Fixed(*h)),
+        Element::Text { style, .. } => style.height.clone().unwrap_or(Size::Fixed(0.0)),
+        Element::Row { style, .. } => style.height.clone().unwrap_or(Size::Fixed(0.0)), // rows shrink to content height by default
+        Element::Column { style, .. } => style.height.clone().unwrap_or(Size::Fixed(0.0)),
+    }
+}
+
 fn measure(element: &Element, fonts: &mut Fonts) -> (f32, f32) {
     match element {
         Element::Empty => (0.0, 0.0),
-        Element::Rect { w, h, style, .. } => (
-            w + style.padding.left + style.padding.right,
-            h + style.padding.top + style.padding.bottom,
-        ),
+        Element::Rect { w, h, style, .. } => {
+            let mw = match style.width.as_ref().unwrap_or(&Size::Fixed(*w)) {
+                Size::Fill | Size::Percent(_) => 0.0,
+                Size::Fixed(v) => *v,
+            };
+            let mh = match style.height.as_ref().unwrap_or(&Size::Fixed(*h)) {
+                Size::Fill | Size::Percent(_) => 0.0,
+                Size::Fixed(v) => *v,
+            };
+            (
+                mw + style.padding.left + style.padding.right,
+                mh + style.padding.top + style.padding.bottom,
+            )
+        }
         Element::Text {
             content,
             font,
@@ -252,9 +291,19 @@ fn measure(element: &Element, fonts: &mut Fonts) -> (f32, f32) {
                 Font::Default => fonts.default(),
             };
             let (w, h) = fonts.measure(content, font_id.unwrap());
+            let mw = match style.width.as_ref() {
+                Some(Size::Fill) | Some(Size::Percent(_)) => 0.0,
+                Some(Size::Fixed(v)) => *v,
+                None => w,
+            };
+            let mh = match style.height.as_ref() {
+                Some(Size::Fill) | Some(Size::Percent(_)) => 0.0,
+                Some(Size::Fixed(v)) => *v,
+                None => h,
+            };
             (
-                w + style.padding.left + style.padding.right,
-                h + style.padding.top + style.padding.bottom,
+                mw + style.padding.left + style.padding.right,
+                mh + style.padding.top + style.padding.bottom,
             )
         }
         Element::Row {
@@ -300,12 +349,21 @@ fn measure(element: &Element, fonts: &mut Fonts) -> (f32, f32) {
     }
 }
 
-fn layout(element: &mut Element, x: f32, y: f32, fonts: &mut Fonts) {
+fn layout(
+    element: &mut Element,
+    x: f32,
+    y: f32,
+    available_w: f32,
+    available_h: f32,
+    fonts: &mut Fonts,
+) {
     match element {
         Element::Empty => {}
-        Element::Rect { style, .. } => {
+        Element::Rect { style, w, h, .. } => {
             style.x = x + style.padding.left;
             style.y = y + style.padding.top;
+            *w = available_w - style.padding.left - style.padding.right;
+            *h = available_h - style.padding.top - style.padding.bottom;
         }
         Element::Text { style, .. } => {
             style.x = x + style.padding.left;
@@ -316,14 +374,59 @@ fn layout(element: &mut Element, x: f32, y: f32, fonts: &mut Fonts) {
         } => {
             style.x = x;
             style.y = y;
-            let mut cursor_x = x + style.padding.left;
-            let cursor_y = y + style.padding.top;
+
+            // resolve the row's own size first
+            let self_w = match style.width.clone() {
+                Some(Size::Fill) => available_w,
+                Some(Size::Percent(p)) => available_w * p / 100.0,
+                Some(Size::Fixed(v)) => v,
+                None => measure_children_width(children, style, fonts),
+            };
+            let self_h = match style.height.clone() {
+                Some(Size::Fill) => available_h,
+                Some(Size::Percent(p)) => available_h * p / 100.0,
+                Some(Size::Fixed(v)) => v,
+                None => available_h,
+            };
+
+            let inner_w = self_w - style.padding.left - style.padding.right;
+            let inner_h = self_h - style.padding.top - style.padding.bottom;
             let gap = style.gap;
             let last = children.len().saturating_sub(1);
+            let gap_total = gap * last as f32;
+
+            let mut fixed_width: f32 = 0.0;
+            let mut fill_count: u32 = 0;
+            for child in children.iter() {
+                match child_width_sizing(child) {
+                    Size::Fill => fill_count += 1,
+                    Size::Percent(_) => {}
+                    Size::Fixed(_) => fixed_width += measure(child, fonts).0,
+                }
+            }
+
+            let remaining = (inner_w - fixed_width - gap_total).max(0.0);
+            let fill_width = if fill_count > 0 {
+                remaining / fill_count as f32
+            } else {
+                0.0
+            };
+
+            let mut cursor_x = x + style.padding.left;
+            let cursor_y = y + style.padding.top;
             for (i, child) in children.iter_mut().enumerate() {
-                let (cw, _) = measure(child, fonts);
-                layout(child, cursor_x, cursor_y, fonts);
-                cursor_x += cw + if i < last { gap } else { 0.0 };
+                let child_w = match child_width_sizing(child) {
+                    Size::Fill => fill_width,
+                    Size::Percent(p) => inner_w * p / 100.0,
+                    Size::Fixed(_) => measure(child, fonts).0,
+                };
+                let child_h = match child_height_sizing(child) {
+                    Size::Fill => inner_h,
+                    Size::Percent(p) => inner_h * p / 100.0,
+                    Size::Fixed(_) => measure(child, fonts).1,
+                };
+                layout(child, cursor_x, cursor_y, child_w, child_h, fonts);
+                cursor_x += child_w + if i < last { gap } else { 0.0 };
             }
         }
         Element::Column {
@@ -331,17 +434,88 @@ fn layout(element: &mut Element, x: f32, y: f32, fonts: &mut Fonts) {
         } => {
             style.x = x;
             style.y = y;
-            let cursor_x = x + style.padding.left;
-            let mut cursor_y = y + style.padding.top;
+
+            // resolve the column's own size first
+            let self_w = match style.width.clone() {
+                Some(Size::Fill) => available_w,
+                Some(Size::Percent(p)) => available_w * p / 100.0,
+                Some(Size::Fixed(v)) => v,
+                None => available_w,
+            };
+            let self_h = match style.height.clone() {
+                Some(Size::Fill) => available_h,
+                Some(Size::Percent(p)) => available_h * p / 100.0,
+                Some(Size::Fixed(v)) => v,
+                None => measure_children_height(children, style, fonts),
+            };
+
+            let inner_w = self_w - style.padding.left - style.padding.right;
+            let inner_h = self_h - style.padding.top - style.padding.bottom;
             let gap = style.gap;
             let last = children.len().saturating_sub(1);
+            let gap_total = gap * last as f32;
+
+            let mut fixed_height: f32 = 0.0;
+            let mut fill_count: u32 = 0;
+            for child in children.iter() {
+                match child_height_sizing(child) {
+                    Size::Fill => fill_count += 1,
+                    Size::Percent(_) => {}
+                    Size::Fixed(_) => fixed_height += measure(child, fonts).1,
+                }
+            }
+
+            let remaining = (inner_h - fixed_height - gap_total).max(0.0);
+            let fill_height = if fill_count > 0 {
+                remaining / fill_count as f32
+            } else {
+                0.0
+            };
+
+            let cursor_x = x + style.padding.left;
+            let mut cursor_y = y + style.padding.top;
             for (i, child) in children.iter_mut().enumerate() {
-                let (_, ch) = measure(child, fonts);
-                layout(child, cursor_x, cursor_y, fonts);
-                cursor_y += ch + if i < last { gap } else { 0.0 };
+                let child_w = match child_width_sizing(child) {
+                    Size::Fill => inner_w,
+                    Size::Percent(p) => inner_w * p / 100.0,
+                    Size::Fixed(_) => measure(child, fonts).0,
+                };
+                let child_h = match child_height_sizing(child) {
+                    Size::Fill => fill_height,
+                    Size::Percent(p) => inner_h * p / 100.0,
+                    Size::Fixed(_) => measure(child, fonts).1,
+                };
+                layout(child, cursor_x, cursor_y, child_w, child_h, fonts);
+                cursor_y += child_h + if i < last { gap } else { 0.0 };
             }
         }
     }
+}
+
+fn measure_children_width(children: &[Element], style: &crate::Style, fonts: &mut Fonts) -> f32 {
+    let mut total = 0.0f32;
+    for child in children {
+        total += measure(child, fonts).0;
+    }
+    let gap_total = if children.is_empty() {
+        0.0
+    } else {
+        style.gap * (children.len() - 1) as f32
+    };
+    total + gap_total + style.padding.left + style.padding.right
+}
+
+fn measure_children_height(children: &[Element], style: &crate::Style, fonts: &mut Fonts) -> f32 {
+    let mut total = 0.0f32;
+    for child in children {
+        total += measure(child, fonts).1;
+    }
+    let gap_total = if children.is_empty() {
+        0.0
+    } else {
+        style.gap * (children.len() - 1) as f32
+    };
+    total + gap_total + style.padding.top + style.padding.bottom
 }
 
 impl<A: App> ApplicationHandler for Runner<A> {
