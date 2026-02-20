@@ -198,10 +198,18 @@ impl<A: App> Runner<A> {
                     0.0,
                 );
             }
-            Element::Text { content, color, font, .. } => {
+            Element::Text {
+                content,
+                color,
+                font,
+                ..
+            } => {
                 let fonts = self.fonts.as_mut().unwrap();
                 let font_id = match font {
-                    Font::Name(name) => fonts.get_by_name(name),
+                    Font::Name(name) => fonts.get_by_name(name).or_else(|| {
+                        println!("Font '{}' not found, using default", name);
+                        fonts.default()
+                    }),
                     Font::Default => fonts.default(),
                 };
                 let entry = fonts.get(font_id.unwrap());

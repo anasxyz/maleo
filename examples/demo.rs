@@ -31,12 +31,12 @@ impl App for MyApp {
         row(vec![text(
             &format!("Text: {}", self.text),
             Color::rgb(1.0, 1.0, 1.0),
-        ).font(Font::Name("font1".to_string()))])
+        )])
     }
 
     fn fonts(&self, fonts: &mut Fonts) {
-        let font1 = fonts.add("font1", "JetBrainsMono Nerd Font Mono", 14.0);
-        fonts.set_default(font1);
+        let font = fonts.add("default", "JetBrainsMono Nerd Font Mono", 14.0);
+        fonts.set_default(font);
     }
 }
 
