@@ -28,12 +28,15 @@ impl App for MyApp {
                     .width(Size::Percent(25.0))
                     .height(Size::Fill),
             ])
+            .width(Size::Fill)
             .height(Size::Fill),
             row(vec![
                 text("Hello", Color::WHITE),
                 text("World", Color::rgb(1.0, 0.0, 0.0)),
             ]),
         ])
+        .width(Size::Fill)
+        .height(Size::Fill)
     }
 
     fn fonts(&self, fonts: &mut Fonts) {
