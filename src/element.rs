@@ -107,6 +107,7 @@ pub struct Style {
     pub align_x: Align,
     pub align_y: Align,
     pub gap: f32,
+    pub background: Option<Color>,
 }
 
 impl Default for Style {
@@ -124,6 +125,7 @@ impl Default for Style {
             align_x: Align::Start,
             align_y: Align::Start,
             gap: 0.0,
+            background: None,
         }
     }
 }
@@ -181,10 +183,14 @@ pub enum Element {
     Row {
         style: Style,
         children: Vec<Element>,
+        resolved_w: f32,
+        resolved_h: f32,
     },
     Column {
         style: Style,
         children: Vec<Element>,
+        resolved_w: f32,
+        resolved_h: f32,
     },
     Empty,
 }
@@ -270,6 +276,13 @@ impl Element {
         self
     }
 
+    pub fn background(mut self, color: Color) -> Self {
+        if let Some(st) = self.style_mut() {
+            st.background = Some(color);
+        }
+        self
+    }
+
     pub fn font(mut self, font_: Font) -> Self {
         if let Element::Text { ref mut font, .. } = self {
             *font = font_;
@@ -301,6 +314,8 @@ pub fn row(children: Vec<Element>) -> Element {
     Element::Row {
         style: Style::new(),
         children,
+        resolved_w: 0.0,
+        resolved_h: 0.0,
     }
 }
 
@@ -308,6 +323,8 @@ pub fn column(children: Vec<Element>) -> Element {
     Element::Column {
         style: Style::new(),
         children,
+        resolved_w: 0.0,
+        resolved_h: 0.0,
     }
 }
 
