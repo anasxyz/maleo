@@ -237,15 +237,29 @@ impl<A: App> Runner<A> {
 fn measure(element: &Element, fonts: &mut Fonts) -> (f32, f32) {
     match element {
         Element::Empty => (0.0, 0.0),
-        Element::Rect { w, h, .. } => (*w, *h),
-        Element::Text { content, font, .. } => {
+        Element::Rect { w, h, style, .. } => (
+            w + style.padding.left + style.padding.right,
+            h + style.padding.top + style.padding.bottom,
+        ),
+        Element::Text {
+            content,
+            font,
+            style,
+            ..
+        } => {
             let font_id = match font {
                 Font::Name(name) => fonts.get_by_name(name).or_else(|| fonts.default()),
                 Font::Default => fonts.default(),
             };
-            fonts.measure(content, font_id.unwrap())
+            let (w, h) = fonts.measure(content, font_id.unwrap());
+            (
+                w + style.padding.left + style.padding.right,
+                h + style.padding.top + style.padding.bottom,
+            )
         }
-        Element::Row { children, .. } => {
+        Element::Row {
+            style, children, ..
+        } => {
             let mut total_width: f32 = 0.0;
             let mut max_height: f32 = 0.0;
             for child in children {
@@ -253,9 +267,14 @@ fn measure(element: &Element, fonts: &mut Fonts) -> (f32, f32) {
                 total_width += cw;
                 max_height = max_height.max(ch);
             }
-            (total_width, max_height)
+            (
+                total_width + style.padding.left + style.padding.right,
+                max_height + style.padding.top + style.padding.bottom,
+            )
         }
-        Element::Column { children, .. } => {
+        Element::Column {
+            style, children, ..
+        } => {
             let mut max_width: f32 = 0.0;
             let mut total_height: f32 = 0.0;
             for child in children {
@@ -263,7 +282,10 @@ fn measure(element: &Element, fonts: &mut Fonts) -> (f32, f32) {
                 max_width = max_width.max(cw);
                 total_height += ch;
             }
-            (max_width, total_height)
+            (
+                max_width + style.padding.left + style.padding.right,
+                total_height + style.padding.top + style.padding.bottom,
+            )
         }
     }
 }
@@ -272,22 +294,23 @@ fn layout(element: &mut Element, x: f32, y: f32, fonts: &mut Fonts) {
     match element {
         Element::Empty => {}
         Element::Rect { style, .. } => {
-            style.x = x;
-            style.y = y;
+            style.x = x + style.padding.left;
+            style.y = y + style.padding.top;
         }
         Element::Text { style, .. } => {
-            style.x = x;
-            style.y = y;
+            style.x = x + style.padding.left;
+            style.y = y + style.padding.top;
         }
         Element::Row {
             style, children, ..
         } => {
             style.x = x;
             style.y = y;
-            let mut cursor_x = x;
+            let mut cursor_x = x + style.padding.left;
+            let cursor_y = y + style.padding.top;
             for child in children {
                 let (cw, _) = measure(child, fonts);
-                layout(child, cursor_x, y, fonts);
+                layout(child, cursor_x, cursor_y, fonts);
                 cursor_x += cw;
             }
         }
@@ -296,10 +319,11 @@ fn layout(element: &mut Element, x: f32, y: f32, fonts: &mut Fonts) {
         } => {
             style.x = x;
             style.y = y;
-            let mut cursor_y = y;
+            let cursor_x = x + style.padding.left;
+            let mut cursor_y = y + style.padding.top;
             for child in children {
                 let (_, ch) = measure(child, fonts);
-                layout(child, x, cursor_y, fonts);
+                layout(child, cursor_x, cursor_y, fonts);
                 cursor_y += ch;
             }
         }
