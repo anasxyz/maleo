@@ -19,12 +19,16 @@ fn build_taffy_node(taffy: &mut TaffyTree<()>, element: &Element, fonts: &mut Fo
     match element {
         Element::Empty => taffy.new_leaf(taffy::Style::default()).unwrap(),
 
-        Element::Text { content, font, style, .. } => {
+        Element::Text { content, font, font_size, style, .. } => {
             let font_id = match font {
                 Font::Name(name) => fonts.get_by_name(name).or_else(|| fonts.default()),
                 Font::Default => fonts.default(),
             };
-            let (w, h) = fonts.measure(content, font_id.unwrap());
+            let font_id = font_id.unwrap();
+            let (w, h) = match font_size {
+                Some(size) => fonts.measure_sized(content, font_id, *size),
+                None => fonts.measure(content, font_id),
+            };
             taffy.new_leaf(taffy::Style {
                 size: taffy::geometry::Size {
                     width: Dimension::Length(w),

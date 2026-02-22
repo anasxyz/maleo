@@ -221,6 +221,7 @@ pub enum Element {
         content: String,
         color: Color,
         font: Font,
+        font_size: Option<f32>,
         style: Style,
     },
     Button {
@@ -442,6 +443,15 @@ impl Element {
         }
         self
     }
+    pub fn font_size(mut self, size: f32) -> Self {
+        if let Element::Text {
+            ref mut font_size, ..
+        } = self
+        {
+            *font_size = Some(size);
+        }
+        self
+    }
 
     // on_click
     pub fn on_click(mut self, f: impl FnMut() + 'static) -> Self {
@@ -473,6 +483,7 @@ pub fn text(content: &str, color: Color) -> Element {
         content: content.to_string(),
         color,
         font: Font::Default,
+        font_size: None,
         style: Style::default(),
     }
 }

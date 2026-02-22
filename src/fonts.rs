@@ -1,5 +1,5 @@
+use glyphon::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping};
 use std::collections::HashMap;
-use glyphon::{FontSystem, Attrs, Family, Shaping, Buffer, Metrics};
 
 pub enum Font {
     Name(String),
@@ -18,6 +18,7 @@ pub struct Fonts {
     pub(crate) font_system: FontSystem,
     entries: Vec<FontEntry>,
     measure_cache: HashMap<(usize, String), (f32, f32)>,
+    measure_cache_sized: HashMap<(usize, String, u32), (f32, f32)>,
     name_to_id: HashMap<String, FontId>,
     pub default_padding: f32,
     pub default: Option<FontId>,
@@ -29,6 +30,7 @@ impl Fonts {
             font_system: FontSystem::new(),
             entries: Vec::new(),
             measure_cache: HashMap::new(),
+            measure_cache_sized: HashMap::new(),
             name_to_id: HashMap::new(),
             default_padding: 8.0,
             default: None,
@@ -39,7 +41,7 @@ impl Fonts {
         if let Some(&id) = self.name_to_id.get(name) {
             return id;
         }
-        
+
         let id = FontId(self.entries.len());
         self.entries.push(FontEntry {
             family: family.to_string(),
@@ -66,23 +68,23 @@ impl Fonts {
     }
 
     // displays all fonts info, id, name, family, size
-    pub fn display_all_fonts(&self) {
-    }
+    pub fn display_all_fonts(&self) {}
 
     pub fn measure(&mut self, text: &str, id: FontId) -> (f32, f32) {
-        let key = (id.0, text.to_string());
-        if let Some(&cached) = self.measure_cache.get(&key) {
+        let size = self.entries[id.0].size;
+        self.measure_sized(text, id, size)
+    }
+
+    pub fn measure_sized(&mut self, text: &str, id: FontId, size: f32) -> (f32, f32) {
+        let key = (id.0, text.to_string(), (size * 10.0) as u32);
+        if let Some(&cached) = self.measure_cache_sized.get(&key) {
             return cached;
         }
 
         let family = self.entries[id.0].family.clone();
-        let size = self.entries[id.0].size;
         let line_height = size * 1.4;
 
-        let mut buffer = Buffer::new(
-            &mut self.font_system,
-            Metrics::new(size, line_height),
-        );
+        let mut buffer = Buffer::new(&mut self.font_system, Metrics::new(size, line_height));
         buffer.set_size(&mut self.font_system, None, None);
         buffer.set_text(
             &mut self.font_system,
@@ -100,7 +102,7 @@ impl Fonts {
         }
 
         let result = (width, height);
-        self.measure_cache.insert(key, result);
+        self.measure_cache_sized.insert(key, result);
         result
     }
 }

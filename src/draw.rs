@@ -62,6 +62,7 @@ fn draw_clipped(
             content,
             color,
             font,
+            font_size,
             style,
         } => {
             if is_outside(style.x, style.y, 1.0, 1.0, clip) {
@@ -71,9 +72,10 @@ fn draw_clipped(
                 Font::Name(name) => fonts.get_by_name(name).or_else(|| fonts.default()),
                 Font::Default => fonts.default(),
             };
-            let entry = fonts.get(font_id.unwrap());
+            let font_id = font_id.unwrap();
+            let entry = fonts.get(font_id);
             let family = entry.family.clone();
-            let size = entry.size;
+            let size = font_size.unwrap_or(entry.size);
             tr.draw(
                 &mut fonts.font_system,
                 family,
