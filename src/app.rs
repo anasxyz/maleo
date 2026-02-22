@@ -29,7 +29,7 @@ impl Default for Settings {
             title: "Bento UI".to_string(),
             width: 800,
             height: 600,
-            clear_color: Color::rgb(0.1, 0.1, 0.12),
+            clear_color: Color::rgb(5, 5, 5),
         }
     }
 }

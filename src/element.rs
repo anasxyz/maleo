@@ -206,7 +206,7 @@ impl Default for Style {
             border_thickness: 0.0,
             opacity: 1.0,
             overflow: Overflow::Visible,
-            shadow_color: Color::rgba(0.0, 0.0, 0.0, 0.0),
+            shadow_color: Color::TRANSPARENT,
             shadow_offset_x: 0.0,
             shadow_offset_y: 0.0,
             shadow_blur: 0.0,

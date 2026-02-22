@@ -79,7 +79,7 @@ fn draw_clipped(
                     Some(s) => fonts.measure_sized(content, font_id, *s),
                     None => fonts.measure(content, font_id),
                 };
-                w + 3.0
+                w + 2.0
             } else {
                 f32::MAX
             };
@@ -120,26 +120,30 @@ fn draw_clipped(
                 style
                     .background
                     .map(|c| {
-                        Color::rgb(
+                        Color::new(
                             (c.r + 0.15).min(1.0),
                             (c.g + 0.15).min(1.0),
                             (c.b + 0.15).min(1.0),
+                            1.0,
                         )
                     })
-                    .unwrap_or(Color::rgb(0.5, 0.5, 0.6))
+                    .unwrap_or(Color::new(0.5, 0.5, 0.6, 1.0))
             } else if hovered {
                 style
                     .background
                     .map(|c| {
-                        Color::rgb(
+                        Color::new(
                             (c.r + 0.08).min(1.0),
                             (c.g + 0.08).min(1.0),
                             (c.b + 0.08).min(1.0),
+                            1.0,
                         )
                     })
-                    .unwrap_or(Color::rgb(0.35, 0.35, 0.45))
+                    .unwrap_or(Color::new(0.35, 0.35, 0.45, 1.0))
             } else {
-                style.background.unwrap_or(Color::rgb(0.25, 0.25, 0.35))
+                style
+                    .background
+                    .unwrap_or(Color::new(0.25, 0.25, 0.35, 1.0))
             };
 
             draw_shadow(
@@ -181,7 +185,7 @@ fn draw_clipped(
                 tx,
                 ty,
                 *resolved_w,
-                Color::rgb(0.92, 0.92, 0.95),
+                Color::new(0.92, 0.92, 0.95, 1.0),
             );
 
             if clicked {
