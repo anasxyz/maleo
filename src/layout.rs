@@ -2,7 +2,12 @@ use taffy::prelude::*;
 
 use crate::{Align, Element, Fonts, Overflow, Position, Val};
 
-pub fn do_layout(element: &mut Element, width: f32, height: f32, fonts: &mut Fonts) {
+pub fn do_layout<M: Clone + 'static>(
+    element: &mut Element<M>,
+    width: f32,
+    height: f32,
+    fonts: &mut Fonts,
+) {
     let mut taffy: TaffyTree<()> = TaffyTree::new();
     let root = build_taffy_node(&mut taffy, element, fonts);
     taffy
@@ -17,7 +22,11 @@ pub fn do_layout(element: &mut Element, width: f32, height: f32, fonts: &mut Fon
     apply_layout(&taffy, element, root, 0.0, 0.0);
 }
 
-fn build_taffy_node(taffy: &mut TaffyTree<()>, element: &Element, fonts: &mut Fonts) -> NodeId {
+fn build_taffy_node<M: Clone + 'static>(
+    taffy: &mut TaffyTree<()>,
+    element: &Element<M>,
+    fonts: &mut Fonts,
+) -> NodeId {
     match element {
         Element::Empty => taffy.new_leaf(taffy::Style::default()).unwrap(),
 
@@ -109,9 +118,9 @@ fn build_taffy_node(taffy: &mut TaffyTree<()>, element: &Element, fonts: &mut Fo
     }
 }
 
-fn apply_layout(
+fn apply_layout<M: Clone + 'static>(
     taffy: &TaffyTree<()>,
-    element: &mut Element,
+    element: &mut Element<M>,
     node: NodeId,
     parent_x: f32,
     parent_y: f32,
