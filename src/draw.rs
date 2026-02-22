@@ -40,7 +40,7 @@ fn draw_clipped(
                 color.to_array(),
                 style.border_radius,
                 border,
-                style.border_width,
+                style.border_thickness,
                 clip,
             );
         }
@@ -126,7 +126,7 @@ fn draw_clipped(
                 bg.to_array(),
                 style.border_radius,
                 border,
-                style.border_width,
+                style.border_thickness,
                 clip,
             );
 
@@ -171,7 +171,7 @@ fn draw_clipped(
                     bg.to_array(),
                     style.border_radius,
                     border,
-                    style.border_width,
+                    style.border_thickness,
                     clip,
                 );
             }
@@ -205,7 +205,7 @@ fn draw_clipped(
                     bg.to_array(),
                     style.border_radius,
                     border,
-                    style.border_width,
+                    style.border_thickness,
                     clip,
                 );
             }
@@ -233,11 +233,11 @@ fn draw_shape(
     color: [f32; 4],
     border_radius: f32,
     border_color: [f32; 4],
-    border_width: f32,
+    border_thickness: f32,
     clip: Option<[f32; 4]>,
 ) {
     let outline_color = border_color;
-    let outline_thickness = border_width;
+    let outline_thickness = border_thickness;
     if border_radius > 0.0 {
         if let Some([cx, cy, cx2, cy2]) = clip {
             if x < cx || y < cy || x + w > cx2 || y + h > cy2 {

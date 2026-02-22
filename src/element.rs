@@ -159,7 +159,7 @@ pub struct Style {
     pub background: Option<Color>,
     pub border_radius: f32,
     pub border_color: Option<Color>,
-    pub border_width: f32,
+    pub border_thickness: f32,
     pub overflow: Overflow,
 }
 
@@ -357,10 +357,10 @@ impl Element {
         }
         self
     }
-    pub fn border(mut self, color: Color, width: f32) -> Self {
+    pub fn border(mut self, color: Color, thickness: f32) -> Self {
         if let Some(s) = self.style_mut() {
             s.border_color = Some(color);
-            s.border_width = width;
+            s.border_thickness = thickness;
         }
         self
     }
