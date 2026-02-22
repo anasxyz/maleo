@@ -1,18 +1,30 @@
-use crate::{Color, Element, Events, Font, Fonts, Overflow, ShapeRenderer, TextRenderer};
+use crate::{
+    Color, Element, Events, Font, Fonts, Overflow, ShadowRenderer, ShapeRenderer, TextRenderer,
+};
 
 pub fn draw(
     element: &mut Element,
     shape_renderer: &mut ShapeRenderer,
+    shadow_renderer: &mut ShadowRenderer,
     text_renderer: &mut TextRenderer,
     fonts: &mut Fonts,
     events: &Events,
 ) {
-    draw_clipped(element, shape_renderer, text_renderer, fonts, events, None);
+    draw_clipped(
+        element,
+        shape_renderer,
+        shadow_renderer,
+        text_renderer,
+        fonts,
+        events,
+        None,
+    );
 }
 
 fn draw_clipped(
     element: &mut Element,
     sr: &mut ShapeRenderer,
+    shadow: &mut ShadowRenderer,
     tr: &mut TextRenderer,
     fonts: &mut Fonts,
     events: &Events,
@@ -30,6 +42,7 @@ fn draw_clipped(
             if is_outside(style.x, style.y, *resolved_w, *resolved_h, clip) {
                 return;
             }
+            draw_shadow(shadow, style.x, style.y, *resolved_w, *resolved_h, style);
             let border = style.border_color.unwrap_or(Color::TRANSPARENT).to_array();
             draw_shape(
                 sr,
@@ -116,6 +129,14 @@ fn draw_clipped(
                 style.background.unwrap_or(Color::rgb(0.25, 0.25, 0.35))
             };
 
+            draw_shadow(
+                shadow,
+                *resolved_x,
+                *resolved_y,
+                *resolved_w,
+                *resolved_h,
+                style,
+            );
             let border = style.border_color.unwrap_or(Color::TRANSPARENT).to_array();
             draw_shape(
                 sr,
@@ -160,6 +181,7 @@ fn draw_clipped(
             resolved_w,
             resolved_h,
         } => {
+            draw_shadow(shadow, style.x, style.y, *resolved_w, *resolved_h, style);
             if let Some(bg) = style.background {
                 let border = style.border_color.unwrap_or(Color::TRANSPARENT).to_array();
                 draw_shape(
@@ -184,7 +206,7 @@ fn draw_clipped(
                 clip,
             );
             for child in children {
-                draw_clipped(child, sr, tr, fonts, events, child_clip);
+                draw_clipped(child, sr, shadow, tr, fonts, events, child_clip);
             }
         }
 
@@ -194,6 +216,7 @@ fn draw_clipped(
             resolved_w,
             resolved_h,
         } => {
+            draw_shadow(shadow, style.x, style.y, *resolved_w, *resolved_h, style);
             if let Some(bg) = style.background {
                 let border = style.border_color.unwrap_or(Color::TRANSPARENT).to_array();
                 draw_shape(
@@ -218,7 +241,7 @@ fn draw_clipped(
                 clip,
             );
             for child in children {
-                draw_clipped(child, sr, tr, fonts, events, child_clip);
+                draw_clipped(child, sr, shadow, tr, fonts, events, child_clip);
             }
         }
     }
@@ -297,4 +320,20 @@ fn make_child_clip(
 fn with_opacity(mut color: [f32; 4], opacity: f32) -> [f32; 4] {
     color[3] *= opacity;
     color
+}
+
+fn draw_shadow(shadow: &mut ShadowRenderer, x: f32, y: f32, w: f32, h: f32, style: &crate::Style) {
+    if style.shadow_color.a > 0.0 && style.shadow_blur > 0.0 {
+        shadow.draw_shadow(
+            x,
+            y,
+            w,
+            h,
+            with_opacity(style.shadow_color.to_array(), style.opacity),
+            style.border_radius,
+            style.shadow_blur,
+            style.shadow_offset_x,
+            style.shadow_offset_y,
+        );
+    }
 }

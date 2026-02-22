@@ -6,11 +6,13 @@
 mod render {
     pub mod gpu;
     pub mod shape_renderer;
+    pub mod shadow_renderer;
     pub mod text_renderer;
 }
 
 pub use render::gpu::{FrameFinisher, GpuContext, RenderFrame};
 pub use render::shape_renderer::ShapeRenderer;
+pub use render::shadow_renderer::ShadowRenderer;
 pub use render::text_renderer::TextRenderer;
 
 mod app;

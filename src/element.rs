@@ -162,6 +162,10 @@ pub struct Style {
     pub border_thickness: f32,
     pub opacity: f32,
     pub overflow: Overflow,
+    pub shadow_color: Color,
+    pub shadow_offset_x: f32,
+    pub shadow_offset_y: f32,
+    pub shadow_blur: f32,
 }
 
 impl Default for Style {
@@ -194,6 +198,10 @@ impl Default for Style {
             border_thickness: 0.0,
             opacity: 1.0,
             overflow: Overflow::Visible,
+            shadow_color: Color::rgba(0.0, 0.0, 0.0, 0.0),
+            shadow_offset_x: 0.0,
+            shadow_offset_y: 0.0,
+            shadow_blur: 0.0,
         }
     }
 }
@@ -402,6 +410,15 @@ impl Element {
     pub fn opacity(mut self, v: f32) -> Self {
         if let Some(s) = self.style_mut() {
             s.opacity = v;
+        }
+        self
+    }
+    pub fn shadow(mut self, color: Color, offset_x: f32, offset_y: f32, blur: f32) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.shadow_color = color;
+            s.shadow_offset_x = offset_x;
+            s.shadow_offset_y = offset_y;
+            s.shadow_blur = blur;
         }
         self
     }

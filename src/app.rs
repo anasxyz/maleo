@@ -10,7 +10,9 @@ use winit::{
 
 use crate::draw::draw;
 use crate::layout::do_layout;
-use crate::{Color, Element, Events, Fonts, GpuContext, ShapeRenderer, TextRenderer};
+use crate::{
+    Color, Element, Events, Fonts, GpuContext, ShadowRenderer, ShapeRenderer, TextRenderer,
+};
 
 // settings
 
@@ -81,6 +83,7 @@ struct Runner<A: App> {
     scale_factor: f64,
     text_renderer: Option<TextRenderer>,
     shape_renderer: Option<ShapeRenderer>,
+    shadow_renderer: Option<ShadowRenderer>,
     fonts: Option<Fonts>,
     events: Events,
     clear_color: Color,
@@ -98,6 +101,7 @@ impl<A: App> Runner<A> {
             scale_factor: 1.0,
             text_renderer: None,
             shape_renderer: None,
+            shadow_renderer: None,
             fonts: None,
             events: Events::default(),
             clear_color: settings.clear_color,
@@ -131,6 +135,15 @@ impl<A: App> Runner<A> {
         }
     }
 
+    fn resize_shadow(&mut self, w: f32, h: f32) {
+        let gpu = self.gpu.as_ref().unwrap();
+        let device = &gpu.device;
+        let queue = &gpu.queue;
+        if let Some(sr) = self.shadow_renderer.as_mut() {
+            sr.resize(device, queue, w, h);
+        }
+    }
+
     fn render(&mut self) {
         let frame = match self.gpu_mut().begin_frame() {
             Ok(f) => f,
@@ -145,6 +158,7 @@ impl<A: App> Runner<A> {
         draw(
             &mut tree,
             self.shape_renderer.as_mut().unwrap(),
+            self.shadow_renderer.as_mut().unwrap(),
             self.text_renderer.as_mut().unwrap(),
             self.fonts.as_mut().unwrap(),
             &self.events,
@@ -173,6 +187,10 @@ impl<A: App> Runner<A> {
                 occlusion_query_set: None,
             });
 
+            self.shadow_renderer
+                .as_mut()
+                .unwrap()
+                .render(&gpu.device, &gpu.queue, &mut pass);
             self.shape_renderer
                 .as_mut()
                 .unwrap()
@@ -188,6 +206,7 @@ impl<A: App> Runner<A> {
             );
         }
 
+        self.shadow_renderer.as_mut().unwrap().clear();
         self.shape_renderer.as_mut().unwrap().clear();
         self.text_renderer.as_mut().unwrap().clear();
         self.text_renderer.as_mut().unwrap().trim_atlas();
@@ -229,8 +248,10 @@ impl<A: App> ApplicationHandler for Runner<A> {
             let mut text_renderer = TextRenderer::new(&gpu.device, &gpu.queue, format);
             text_renderer.resize(w, h, self.scale_factor);
             let shape_renderer = ShapeRenderer::new(&gpu.device, format, w, h);
+            let shadow_renderer = ShadowRenderer::new(&gpu.device, &gpu.queue, format, w, h);
             self.text_renderer = Some(text_renderer);
             self.shape_renderer = Some(shape_renderer);
+            self.shadow_renderer = Some(shadow_renderer);
         }
 
         let mut fonts = Fonts::new();
@@ -321,12 +342,14 @@ impl<A: App> ApplicationHandler for Runner<A> {
                 self.gpu_mut().resize(size.width, size.height);
                 let (w, h) = self.logical_size();
                 self.on_resize(w, h);
+                self.resize_shadow(w, h);
                 self.window().request_redraw();
             }
             WindowEvent::Resized(size) => {
                 self.gpu_mut().resize(size.width, size.height);
                 let (w, h) = self.logical_size();
                 self.on_resize(w, h);
+                self.resize_shadow(w, h);
                 self.window().request_redraw();
             }
             WindowEvent::RedrawRequested => {
