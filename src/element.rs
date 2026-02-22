@@ -157,6 +157,7 @@ pub struct Style {
 
     // visuals
     pub background: Option<Color>,
+    pub border_radius: f32,
     pub overflow: Overflow,
 }
 
@@ -345,6 +346,12 @@ impl Element {
     pub fn background(mut self, color: Color) -> Self {
         if let Some(s) = self.style_mut() {
             s.background = Some(color);
+        }
+        self
+    }
+    pub fn border_radius(mut self, v: f32) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.border_radius = v;
         }
         self
     }

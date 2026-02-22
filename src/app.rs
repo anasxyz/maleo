@@ -14,7 +14,7 @@ use crate::{
     TextRenderer, Val,
 };
 
-// settings 
+// settings
 
 pub struct Settings {
     pub title: String,
@@ -53,7 +53,7 @@ impl Settings {
     }
 }
 
-// app trait 
+// app trait
 
 pub trait App: 'static + Sized {
     fn new() -> Self;
@@ -71,7 +71,7 @@ fn run<A: App>(settings: Settings) {
         .unwrap();
 }
 
-// runner 
+// runner
 
 struct Runner<A: App> {
     app: A,
@@ -207,14 +207,14 @@ impl<A: App> Runner<A> {
                 if is_outside(style.x, style.y, *resolved_w, *resolved_h, clip) {
                     return;
                 }
-                self.shape_renderer.as_mut().unwrap().draw_rect(
+                draw_shape(
+                    self.shape_renderer.as_mut().unwrap(),
                     style.x,
                     style.y,
                     *resolved_w,
                     *resolved_h,
                     color.to_array(),
-                    [0.0; 4],
-                    0.0,
+                    style.border_radius,
                 );
             }
 
@@ -290,14 +290,14 @@ impl<A: App> Runner<A> {
                     style.background.unwrap_or(Color::rgb(0.25, 0.25, 0.35))
                 };
 
-                self.shape_renderer.as_mut().unwrap().draw_rect(
+                draw_shape(
+                    self.shape_renderer.as_mut().unwrap(),
                     *resolved_x,
                     *resolved_y,
                     *resolved_w,
                     *resolved_h,
                     bg.to_array(),
-                    [0.0; 4],
-                    0.0,
+                    style.border_radius,
                 );
 
                 let fonts = self.fonts.as_mut().unwrap();
@@ -332,14 +332,14 @@ impl<A: App> Runner<A> {
                 resolved_h,
             } => {
                 if let Some(bg) = style.background {
-                    self.shape_renderer.as_mut().unwrap().draw_rect(
+                    draw_shape(
+                        self.shape_renderer.as_mut().unwrap(),
                         style.x,
                         style.y,
                         *resolved_w,
                         *resolved_h,
                         bg.to_array(),
-                        [0.0; 4],
-                        0.0,
+                        style.border_radius,
                     );
                 }
                 let child_clip = child_clip(
@@ -362,14 +362,14 @@ impl<A: App> Runner<A> {
                 resolved_h,
             } => {
                 if let Some(bg) = style.background {
-                    self.shape_renderer.as_mut().unwrap().draw_rect(
+                    draw_shape(
+                        self.shape_renderer.as_mut().unwrap(),
                         style.x,
                         style.y,
                         *resolved_w,
                         *resolved_h,
                         bg.to_array(),
-                        [0.0; 4],
-                        0.0,
+                        style.border_radius,
                     );
                 }
                 let child_clip = child_clip(
@@ -388,7 +388,7 @@ impl<A: App> Runner<A> {
     }
 }
 
-// clipping helpers 
+// clipping helpers
 
 // returns true if the element is fully outside the clip rect
 fn is_outside(x: f32, y: f32, w: f32, h: f32, clip: Option<[f32; 4]>) -> bool {
@@ -426,6 +426,23 @@ fn child_clip(
 }
 
 // taffy helpers
+
+// draw a rect or rounded rect depending on border_radius
+fn draw_shape(
+    sr: &mut crate::ShapeRenderer,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    color: [f32; 4],
+    border_radius: f32,
+) {
+    if border_radius > 0.0 {
+        sr.draw_rounded_rect(x, y, w, h, border_radius, color, [0.0; 4], 0.0);
+    } else {
+        sr.draw_rect(x, y, w, h, color, [0.0; 4], 0.0);
+    }
+}
 
 fn val_to_dimension(v: &Val) -> Dimension {
     match v {
@@ -546,7 +563,7 @@ fn style_to_taffy(style: &crate::Style, flex_direction: FlexDirection) -> taffy:
     }
 }
 
-// build taffy node tree 
+// build taffy node tree
 
 fn build_taffy_node(taffy: &mut TaffyTree<()>, element: &Element, fonts: &mut Fonts) -> NodeId {
     match element {
@@ -639,7 +656,7 @@ fn build_taffy_node(taffy: &mut TaffyTree<()>, element: &Element, fonts: &mut Fo
     }
 }
 
-// apply computed layout back onto elements 
+// apply computed layout back onto elements
 
 fn apply_layout(
     taffy: &TaffyTree<()>,
@@ -731,7 +748,7 @@ fn do_layout(element: &mut Element, width: f32, height: f32, fonts: &mut Fonts) 
     apply_layout(&taffy, element, root, 0.0, 0.0);
 }
 
-// winit ApplicationHandler 
+// winit ApplicationHandler
 
 impl<A: App> ApplicationHandler for Runner<A> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
