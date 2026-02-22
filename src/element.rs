@@ -335,6 +335,17 @@ pub enum Element<M: Clone + 'static = ()> {
         resolved_w: f32,
         resolved_h: f32,
     },
+    TextInput {
+        id: String,
+        placeholder: String,
+        value: Option<String>,
+        style: Style,
+        on_change: Option<Box<dyn Fn(String) -> M>>,
+        resolved_x: f32,
+        resolved_y: f32,
+        resolved_w: f32,
+        resolved_h: f32,
+    },
     Row {
         style: Style,
         children: Vec<Element<M>>,
@@ -359,6 +370,7 @@ impl<M: Clone + 'static> Element<M> {
             Element::Row { style, .. } => Some(style),
             Element::Column { style, .. } => Some(style),
             Element::Button { style, .. } => Some(style),
+            Element::TextInput { style, .. } => Some(style),
             Element::Empty => None,
         }
     }
@@ -370,6 +382,25 @@ impl<M: Clone + 'static> Element<M> {
         } = self
         {
             *on_click = Some(msg);
+        }
+        self
+    }
+
+    // on_change — called when text input value changes, receives new string
+    pub fn on_change(mut self, f: impl Fn(String) -> M + 'static) -> Self {
+        if let Element::TextInput {
+            ref mut on_change, ..
+        } = self
+        {
+            *on_change = Some(Box::new(f));
+        }
+        self
+    }
+
+    // value — controlled value, synced to internal state each frame
+    pub fn value(mut self, v: &str) -> Self {
+        if let Element::TextInput { ref mut value, .. } = self {
+            *value = Some(v.to_string());
         }
         self
     }
@@ -620,6 +651,20 @@ pub fn button<M: Clone + 'static>(label: &str) -> Element<M> {
         label: label.to_string(),
         style: Style::default(),
         on_click: None,
+        resolved_x: 0.0,
+        resolved_y: 0.0,
+        resolved_w: 0.0,
+        resolved_h: 0.0,
+    }
+}
+
+pub fn text_input<M: Clone + 'static>(id: &str, placeholder: &str) -> Element<M> {
+    Element::TextInput {
+        id: id.to_string(),
+        placeholder: placeholder.to_string(),
+        value: None,
+        style: Style::default(),
+        on_change: None,
         resolved_x: 0.0,
         resolved_y: 0.0,
         resolved_w: 0.0,

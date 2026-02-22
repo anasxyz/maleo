@@ -90,6 +90,32 @@ fn build_taffy_node<M: Clone + 'static>(
                 .unwrap()
         }
 
+        Element::TextInput { style, .. } => {
+            let font_id = fonts.default_id().unwrap();
+            let (_, th) = fonts.measure("M", font_id);
+            let natural_w = 200.0;
+            let natural_h = th + 16.0;
+            taffy
+                .new_leaf(taffy::Style {
+                    size: taffy::geometry::Size {
+                        width: match &style.width {
+                            Val::Auto => Dimension::Length(natural_w),
+                            other => val_to_dimension(other),
+                        },
+                        height: match &style.height {
+                            Val::Auto => Dimension::Length(natural_h),
+                            other => val_to_dimension(other),
+                        },
+                    },
+                    margin: margin_to_rect_lpa(&style.margin),
+                    flex_grow: style.grow,
+                    flex_shrink: 1.0,
+                    align_self: style.align_self.and_then(align_to_self),
+                    ..Default::default()
+                })
+                .unwrap()
+        }
+
         Element::Row {
             style, children, ..
         } => {
@@ -149,6 +175,18 @@ fn apply_layout<M: Clone + 'static>(
             *resolved_h = h;
         }
         Element::Button {
+            resolved_x,
+            resolved_y,
+            resolved_w,
+            resolved_h,
+            ..
+        } => {
+            *resolved_x = x;
+            *resolved_y = y;
+            *resolved_w = w;
+            *resolved_h = h;
+        }
+        Element::TextInput {
             resolved_x,
             resolved_y,
             resolved_w,

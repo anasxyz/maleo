@@ -3,6 +3,13 @@ use crate::{
     Color, Element, Fonts, Overflow, ShadowRenderer, ShapeRenderer, TextAlign, TextRenderer,
 };
 
+// internal state stored per text input widget — only cursor and focus, not the value
+#[derive(Default)]
+pub struct TextInputState {
+    pub focused: bool,
+    pub cursor: usize,
+}
+
 pub fn draw<M: Clone + 'static>(
     element: &mut Element<M>,
     shape_renderer: &mut ShapeRenderer,
@@ -212,6 +219,127 @@ fn draw_clipped<M: Clone + 'static>(
             }
         }
 
+        Element::TextInput {
+            id,
+            placeholder,
+            value,
+            style: _,
+            on_change,
+            resolved_x,
+            resolved_y,
+            resolved_w,
+            resolved_h,
+        } => {
+            if is_outside(*resolved_x, *resolved_y, *resolved_w, *resolved_h, clip) {
+                return;
+            }
+
+            // clamp cursor to current value length in case value shrank externally
+            let value_str = value.as_deref().unwrap_or("");
+            {
+                let s = state.get_or_default_mut::<TextInputState>(id);
+                if s.cursor > value_str.len() {
+                    s.cursor = value_str.len();
+                }
+            }
+
+            // cache current value in state so runner can access it on key events
+            state.set_input_value(id, value_str);
+
+            // register callback each frame so runner can call it on key events
+            if let Some(cb) = on_change.take() {
+                state.register_text_callback(id, cb);
+            }
+
+            let x = *resolved_x;
+            let y = *resolved_y;
+            let w = *resolved_w;
+            let h = *resolved_h;
+
+            // click to focus
+            let hovered = mouse_x >= x && mouse_x <= x + w && mouse_y >= y && mouse_y <= y + h;
+            if hovered && left_just_pressed {
+                state.get_or_default_mut::<TextInputState>(id).focused = true;
+            } else if left_just_pressed && !hovered {
+                state.get_or_default_mut::<TextInputState>(id).focused = false;
+            }
+
+            let focused = state.get_or_default::<TextInputState>(id).focused;
+
+            // background
+            let bg = if focused {
+                Color::new(0.18, 0.18, 0.22, 1.0)
+            } else if hovered {
+                Color::new(0.16, 0.16, 0.20, 1.0)
+            } else {
+                Color::new(0.13, 0.13, 0.17, 1.0)
+            };
+            let border = if focused {
+                Color::new(0.4, 0.5, 0.9, 1.0)
+            } else {
+                Color::new(0.3, 0.3, 0.35, 1.0)
+            };
+
+            sr.draw_rounded_rect(x, y, w, h, 4.0, bg.to_array(), border.to_array(), 1.5);
+
+            // text or placeholder
+            let pad = 8.0;
+            let font_id = fonts.default_id().unwrap();
+            let family = fonts.get(font_id).family.clone();
+            let size = fonts.get(font_id).size;
+            let (_, th) = fonts.measure("M", font_id);
+            let ty = y + (h - th) / 2.0;
+
+            if value_str.is_empty() {
+                tr.draw(
+                    &mut fonts.font_system,
+                    family.clone(),
+                    size,
+                    400,
+                    false,
+                    TextAlign::Left,
+                    placeholder,
+                    x + pad,
+                    ty,
+                    w - pad * 2.0,
+                    clip,
+                    Color::new(0.45, 0.45, 0.5, 1.0),
+                );
+            } else {
+                tr.draw(
+                    &mut fonts.font_system,
+                    family.clone(),
+                    size,
+                    400,
+                    false,
+                    TextAlign::Left,
+                    value_str,
+                    x + pad,
+                    ty,
+                    w - pad * 2.0,
+                    clip,
+                    Color::new(0.92, 0.92, 0.95, 1.0),
+                );
+            }
+
+            // cursor
+            if focused {
+                let cursor_pos = state.get_or_default::<TextInputState>(id).cursor;
+                let text_before = &value_str[..cursor_pos.min(value_str.len())];
+                let (cursor_x, _) = fonts.measure(text_before, font_id);
+                let cx = x + pad + cursor_x;
+                sr.draw_rect(
+                    cx,
+                    y + 4.0,
+                    1.5,
+                    h - 8.0,
+                    Color::new(0.7, 0.75, 1.0, 1.0).to_array(),
+                    [0.0; 4],
+                    0.0,
+                );
+            }
+        }
+
         Element::Row {
             style,
             children,
@@ -395,4 +523,93 @@ fn make_child_clip(
 fn with_opacity(mut color: [f32; 4], opacity: f32) -> [f32; 4] {
     color[3] *= opacity;
     color
+}
+
+// process a key event for a focused input — takes current value, returns new value if changed
+// cursor lives in state, value lives in the app
+pub fn text_input_key(
+    state: &mut StateStore,
+    id: &str,
+    current_value: &str,
+    event: &crate::events::Event,
+    text: &str,
+) -> Option<String> {
+    use crate::events::{Event, Key};
+
+    let focused = state.get_or_default::<TextInputState>(id).focused;
+    if !focused {
+        return None;
+    }
+
+    let mut value = current_value.to_string();
+    let mut cursor = state
+        .get_or_default::<TextInputState>(id)
+        .cursor
+        .min(value.len());
+    let mut changed = false;
+
+    match event {
+        Event::KeyPressed {
+            key: Key::Backspace,
+            ..
+        } => {
+            if cursor > 0 {
+                if let Some((i, _)) = value[..cursor].char_indices().next_back() {
+                    value.remove(i);
+                    cursor = i;
+                    changed = true;
+                }
+            }
+        }
+        Event::KeyPressed {
+            key: Key::Delete, ..
+        } => {
+            if cursor < value.len() {
+                value.remove(cursor);
+                changed = true;
+            }
+        }
+        Event::KeyPressed { key: Key::Left, .. } => {
+            if cursor > 0 {
+                if let Some((i, _)) = value[..cursor].char_indices().next_back() {
+                    cursor = i;
+                }
+            }
+        }
+        Event::KeyPressed {
+            key: Key::Right, ..
+        } => {
+            if cursor < value.len() {
+                cursor = value[cursor..]
+                    .char_indices()
+                    .nth(1)
+                    .map(|(i, _)| cursor + i)
+                    .unwrap_or(value.len());
+            }
+        }
+        Event::KeyPressed { key: Key::Home, .. } => {
+            cursor = 0;
+        }
+        Event::KeyPressed { key: Key::End, .. } => {
+            cursor = value.len();
+        }
+        Event::KeyPressed { .. } => {
+            // use the actual text from the OS — handles shift, locale, keyboard layout
+            if !text.is_empty() && text != "\r" && text != "\n" && text != "\r\n" {
+                value.insert_str(cursor, text);
+                cursor += text.len();
+                changed = true;
+            }
+        }
+        _ => {}
+    }
+
+    state.get_or_default_mut::<TextInputState>(id).cursor = cursor;
+
+    if changed { Some(value) } else { None }
+}
+
+// scan state to find which text input (if any) is currently focused
+pub fn find_focused_input(state: &StateStore) -> Option<String> {
+    state.find_focused_text_input()
 }

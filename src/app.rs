@@ -10,7 +10,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::draw::draw;
+use crate::draw::{draw, text_input_key};
 use crate::events::{Event, Key, MouseButton};
 use crate::layout::do_layout;
 use crate::state::StateStore;
@@ -111,6 +111,7 @@ struct Runner<A: App> {
     shadow_renderer: Option<ShadowRenderer>,
     fonts: Option<Fonts>,
     state: StateStore,
+    focused_input_id: Option<String>,
     clear_color: Color,
     // task infrastructure
     proxy: EventLoopProxy<Wake>,
@@ -156,6 +157,7 @@ impl<A: App> Runner<A> {
             shadow_renderer: None,
             fonts: None,
             state: StateStore::new(),
+            focused_input_id: None,
             clear_color: settings.clear_color,
             proxy,
             tx,
@@ -271,6 +273,9 @@ impl<A: App> Runner<A> {
         let mut tree = self.app.view();
         do_layout(&mut tree, width, height, self.fonts.as_mut().unwrap());
 
+        // clear callbacks from last frame — draw pass will re-register them
+        self.state.clear_text_callbacks();
+
         let actions = draw(
             &mut tree,
             self.shape_renderer.as_mut().unwrap(),
@@ -336,6 +341,9 @@ impl<A: App> Runner<A> {
             let tasks = self.app.update(action);
             self.spawn_tasks(tasks);
         }
+
+        // update focused input id by scanning state
+        self.focused_input_id = crate::draw::find_focused_input(&self.state);
 
         self.mouse_left_just_pressed = false;
         self.mouse_right_just_pressed = false;
@@ -471,20 +479,73 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                         _ => {}
                     }
                     let (ctrl, shift, alt) = (self.ctrl, self.shift, self.alt);
-                    if pressed {
-                        self.dispatch_event(Event::KeyPressed {
+                    let bento_event = if pressed {
+                        Event::KeyPressed {
                             key,
                             ctrl,
                             shift,
                             alt,
-                        });
+                        }
                     } else {
-                        self.dispatch_event(Event::KeyReleased {
+                        Event::KeyReleased {
                             key,
                             ctrl,
                             shift,
                             alt,
-                        });
+                        }
+                    };
+
+                    // forward to focused text input first — consumes the event if handled
+                    let mut consumed = false;
+                    eprintln!(
+                        "KEY: focused_input_id={:?} pressed={}",
+                        self.focused_input_id, pressed
+                    );
+                    if let Some(id) = &self.focused_input_id.clone() {
+                        let current_value = self.state.get_input_value(id);
+                        let text = if pressed && !ctrl {
+                            event.text.as_ref().map(|t| t.as_str()).unwrap_or("")
+                        } else {
+                            ""
+                        };
+                        eprintln!(
+                            "  id={} current_value={:?} text={:?}",
+                            id, current_value, text
+                        );
+                        if let Some(new_value) =
+                            text_input_key(&mut self.state, id, &current_value, &bento_event, text)
+                        {
+                            eprintln!("  new_value={:?}", new_value);
+                            consumed = true;
+                            if let Some(action) =
+                                self.state.call_text_callback::<A::Action>(id, new_value)
+                            {
+                                eprintln!("  callback fired");
+                                let tasks = self.app.update(action);
+                                self.spawn_tasks(tasks);
+                            } else {
+                                eprintln!("  callback returned None");
+                            }
+                            self.window().request_redraw();
+                        } else if matches!(
+                            bento_event,
+                            Event::KeyPressed {
+                                key: Key::Left
+                                    | Key::Right
+                                    | Key::Home
+                                    | Key::End
+                                    | Key::Backspace
+                                    | Key::Delete,
+                                ..
+                            }
+                        ) {
+                            consumed = true;
+                            self.window().request_redraw();
+                        }
+                    }
+
+                    if !consumed {
+                        self.dispatch_event(bento_event);
                     }
                 }
                 self.window().request_redraw();
