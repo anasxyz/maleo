@@ -1,6 +1,6 @@
-use std::collections::HashSet;
 use std::sync::Arc;
 
+use taffy::prelude::*;
 use winit::{
     application::ApplicationHandler,
     event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
@@ -10,9 +10,11 @@ use winit::{
 };
 
 use crate::{
-    Align, Color, Element, Events, Font, FontId, Fonts, GpuContext, ShapeRenderer, Size,
-    TextRenderer,
+    Align, Color, Element, Events, Font, Fonts, GpuContext, Overflow, Position, ShapeRenderer,
+    TextRenderer, Val,
 };
+
+// settings 
 
 pub struct Settings {
     pub title: String,
@@ -37,12 +39,10 @@ impl Settings {
         self.title = title.to_string();
         self
     }
-
     pub fn width(mut self, width: u32) -> Self {
         self.width = width;
         self
     }
-
     pub fn height(mut self, height: u32) -> Self {
         self.height = height;
         self
@@ -52,6 +52,8 @@ impl Settings {
         self
     }
 }
+
+// app trait 
 
 pub trait App: 'static + Sized {
     fn new() -> Self;
@@ -68,6 +70,8 @@ fn run<A: App>(settings: Settings) {
         .run_app(&mut Runner::new(A::new(), settings))
         .unwrap();
 }
+
+// runner 
 
 struct Runner<A: App> {
     app: A,
@@ -88,7 +92,7 @@ impl<A: App> Runner<A> {
     fn new(app: A, settings: Settings) -> Self {
         Self {
             app,
-            title: settings.title.to_string(),
+            title: settings.title,
             width: settings.width,
             height: settings.height,
             window: None,
@@ -139,16 +143,7 @@ impl<A: App> Runner<A> {
         let (width, height) = self.logical_size();
 
         let mut tree = self.app.update(&self.events);
-        measure(&tree, self.fonts.as_mut().unwrap());
-        layout(
-            &mut tree,
-            0.0,
-            0.0,
-            width,
-            height,
-            self.fonts.as_mut().unwrap(),
-        );
-        println!("Rendering...");
+        do_layout(&mut tree, width, height, self.fonts.as_mut().unwrap());
         self.draw_element(&mut tree);
 
         {
@@ -196,27 +191,42 @@ impl<A: App> Runner<A> {
     }
 
     fn draw_element(&mut self, el: &mut Element) {
+        self.draw_clipped(el, None);
+    }
+
+    fn draw_clipped(&mut self, el: &mut Element, clip: Option<[f32; 4]>) {
         match el {
             Element::Empty => {}
+
             Element::Rect {
-                w, h, color, style, ..
+                color,
+                style,
+                resolved_w,
+                resolved_h,
             } => {
+                if is_outside(style.x, style.y, *resolved_w, *resolved_h, clip) {
+                    return;
+                }
                 self.shape_renderer.as_mut().unwrap().draw_rect(
                     style.x,
                     style.y,
-                    *w,
-                    *h,
+                    *resolved_w,
+                    *resolved_h,
                     color.to_array(),
                     [0.0; 4],
                     0.0,
                 );
             }
+
             Element::Text {
                 content,
                 color,
                 font,
                 style,
             } => {
+                if is_outside(style.x, style.y, 1.0, 1.0, clip) {
+                    return;
+                }
                 let fonts = self.fonts.as_mut().unwrap();
                 let font_id = match font {
                     Font::Name(name) => fonts.get_by_name(name).or_else(|| fonts.default()),
@@ -235,49 +245,76 @@ impl<A: App> Runner<A> {
                     *color,
                 );
             }
+
             Element::Button {
                 label,
                 style,
+                on_click,
+                resolved_x,
+                resolved_y,
                 resolved_w,
                 resolved_h,
-                on_click,
             } => {
-                let hovered = self.events.mouse.over(style.x, style.y, *resolved_w, *resolved_h);
+                if is_outside(*resolved_x, *resolved_y, *resolved_w, *resolved_h, clip) {
+                    return;
+                }
+                let hovered =
+                    self.events
+                        .mouse
+                        .over(*resolved_x, *resolved_y, *resolved_w, *resolved_h);
                 let clicked = hovered && self.events.mouse.left_just_pressed;
 
                 let bg = if clicked {
-                    style.background.map(|c| Color::rgb(
-                        (c.r + 0.15).min(1.0),
-                        (c.g + 0.15).min(1.0),
-                        (c.b + 0.15).min(1.0),
-                    )).unwrap_or(Color::rgb(0.5, 0.5, 0.6))
+                    style
+                        .background
+                        .map(|c| {
+                            Color::rgb(
+                                (c.r + 0.15).min(1.0),
+                                (c.g + 0.15).min(1.0),
+                                (c.b + 0.15).min(1.0),
+                            )
+                        })
+                        .unwrap_or(Color::rgb(0.5, 0.5, 0.6))
                 } else if hovered {
-                    style.background.map(|c| Color::rgb(
-                        (c.r + 0.08).min(1.0),
-                        (c.g + 0.08).min(1.0),
-                        (c.b + 0.08).min(1.0),
-                    )).unwrap_or(Color::rgb(0.35, 0.35, 0.45))
+                    style
+                        .background
+                        .map(|c| {
+                            Color::rgb(
+                                (c.r + 0.08).min(1.0),
+                                (c.g + 0.08).min(1.0),
+                                (c.b + 0.08).min(1.0),
+                            )
+                        })
+                        .unwrap_or(Color::rgb(0.35, 0.35, 0.45))
                 } else {
                     style.background.unwrap_or(Color::rgb(0.25, 0.25, 0.35))
                 };
 
                 self.shape_renderer.as_mut().unwrap().draw_rect(
-                    style.x, style.y, *resolved_w, *resolved_h,
-                    bg.to_array(), [0.0; 4], 0.0,
+                    *resolved_x,
+                    *resolved_y,
+                    *resolved_w,
+                    *resolved_h,
+                    bg.to_array(),
+                    [0.0; 4],
+                    0.0,
                 );
 
-                // draw label centered with fixed internal spacing
                 let fonts = self.fonts.as_mut().unwrap();
                 let font_id = fonts.default().unwrap();
                 let entry = fonts.get(font_id);
                 let family = entry.family.clone();
                 let size = entry.size;
                 let (tw, th) = fonts.measure(label, font_id);
-                let tx = style.x + (*resolved_w - tw) / 2.0;
-                let ty = style.y + (*resolved_h - th) / 2.0;
+                let tx = *resolved_x + (*resolved_w - tw) / 2.0;
+                let ty = *resolved_y + (*resolved_h - th) / 2.0;
                 self.text_renderer.as_mut().unwrap().draw(
                     &mut self.fonts.as_mut().unwrap().font_system,
-                    family, size, label, tx, ty,
+                    family,
+                    size,
+                    label,
+                    tx,
+                    ty,
                     Color::rgb(0.92, 0.92, 0.95),
                 );
 
@@ -287,6 +324,7 @@ impl<A: App> Runner<A> {
                     }
                 }
             }
+
             Element::Row {
                 style,
                 children,
@@ -304,10 +342,19 @@ impl<A: App> Runner<A> {
                         0.0,
                     );
                 }
+                let child_clip = child_clip(
+                    style.x,
+                    style.y,
+                    *resolved_w,
+                    *resolved_h,
+                    style.overflow,
+                    clip,
+                );
                 for child in children {
-                    self.draw_element(child);
+                    self.draw_clipped(child, child_clip);
                 }
             }
+
             Element::Column {
                 style,
                 children,
@@ -325,53 +372,186 @@ impl<A: App> Runner<A> {
                         0.0,
                     );
                 }
+                let child_clip = child_clip(
+                    style.x,
+                    style.y,
+                    *resolved_w,
+                    *resolved_h,
+                    style.overflow,
+                    clip,
+                );
                 for child in children {
-                    self.draw_element(child);
+                    self.draw_clipped(child, child_clip);
                 }
             }
         }
     }
 }
 
-fn child_width_sizing(element: &Element) -> Size {
-    match element {
-        Element::Empty => Size::Fixed(0.0),
-        Element::Rect { style, w, .. } => style.width.clone().unwrap_or(Size::Fixed(*w)),
-        Element::Text { style, .. } => style.width.clone().unwrap_or(Size::Fixed(0.0)),
-        Element::Row { style, .. } => style.width.clone().unwrap_or(Size::Fill),
-        Element::Column { style, .. } => style.width.clone().unwrap_or(Size::Fill),
-        Element::Button { style, .. } => style.width.clone().unwrap_or(Size::Fixed(0.0)),
-    }
+// clipping helpers 
+
+// returns true if the element is fully outside the clip rect
+fn is_outside(x: f32, y: f32, w: f32, h: f32, clip: Option<[f32; 4]>) -> bool {
+    let Some([cx, cy, cx2, cy2]) = clip else {
+        return false;
+    };
+    x + w < cx || y + h < cy || x > cx2 || y > cy2
 }
 
-fn child_height_sizing(element: &Element) -> Size {
-    match element {
-        Element::Empty => Size::Fixed(0.0),
-        Element::Rect { style, h, .. } => style.height.clone().unwrap_or(Size::Fixed(*h)),
-        Element::Text { style, .. } => style.height.clone().unwrap_or(Size::Fixed(0.0)),
-        Element::Row { style, .. } => style.height.clone().unwrap_or(Size::Fixed(0.0)),
-        Element::Column { style, .. } => style.height.clone().unwrap_or(Size::Fixed(0.0)),
-        Element::Button { style, .. } => style.height.clone().unwrap_or(Size::Fixed(0.0)),
-    }
-}
-
-fn measure(element: &Element, fonts: &mut Fonts) -> (f32, f32) {
-    match element {
-        Element::Empty => (0.0, 0.0),
-        Element::Rect { w, h, style, .. } => {
-            let mw = match style.width.as_ref().unwrap_or(&Size::Fixed(*w)) {
-                Size::Fill | Size::Percent(_) => 0.0,
-                Size::Fixed(v) => *v,
-            };
-            let mh = match style.height.as_ref().unwrap_or(&Size::Fixed(*h)) {
-                Size::Fill | Size::Percent(_) => 0.0,
-                Size::Fixed(v) => *v,
-            };
-            (
-                mw + style.padding.left + style.padding.right,
-                mh + style.padding.top + style.padding.bottom,
-            )
+// computes the clip rect to pass to children
+fn child_clip(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    overflow: Overflow,
+    parent_clip: Option<[f32; 4]>,
+) -> Option<[f32; 4]> {
+    if overflow == Overflow::Hidden || overflow == Overflow::Scroll {
+        let new_clip = [x, y, x + w, y + h];
+        // intersect with parent clip if there is one
+        if let Some([px, py, px2, py2]) = parent_clip {
+            Some([
+                new_clip[0].max(px),
+                new_clip[1].max(py),
+                new_clip[2].min(px2),
+                new_clip[3].min(py2),
+            ])
+        } else {
+            Some(new_clip)
         }
+    } else {
+        parent_clip
+    }
+}
+
+// taffy helpers
+
+fn val_to_dimension(v: &Val) -> Dimension {
+    match v {
+        Val::Auto => Dimension::Auto,
+        Val::Px(v) => Dimension::Length(*v),
+        Val::Percent(p) => Dimension::Percent(*p / 100.0),
+    }
+}
+
+fn val_to_lpa(v: &Val) -> LengthPercentageAuto {
+    match v {
+        Val::Auto => LengthPercentageAuto::Auto,
+        Val::Px(v) => LengthPercentageAuto::Length(*v),
+        Val::Percent(p) => LengthPercentageAuto::Percent(*p / 100.0),
+    }
+}
+
+fn edges_to_rect_lp(e: &crate::Edges) -> Rect<LengthPercentage> {
+    Rect {
+        left: LengthPercentage::Length(e.left),
+        right: LengthPercentage::Length(e.right),
+        top: LengthPercentage::Length(e.top),
+        bottom: LengthPercentage::Length(e.bottom),
+    }
+}
+
+fn edges_to_rect_lpa(e: &crate::Edges) -> Rect<LengthPercentageAuto> {
+    Rect {
+        left: LengthPercentageAuto::Length(e.left),
+        right: LengthPercentageAuto::Length(e.right),
+        top: LengthPercentageAuto::Length(e.top),
+        bottom: LengthPercentageAuto::Length(e.bottom),
+    }
+}
+
+fn align_to_justify(a: Align) -> Option<JustifyContent> {
+    Some(match a {
+        Align::Start => JustifyContent::FlexStart,
+        Align::Center => JustifyContent::Center,
+        Align::End => JustifyContent::FlexEnd,
+        Align::SpaceBetween => JustifyContent::SpaceBetween,
+        Align::SpaceAround => JustifyContent::SpaceAround,
+        Align::SpaceEvenly => JustifyContent::SpaceEvenly,
+    })
+}
+
+fn align_to_items(a: Align) -> Option<AlignItems> {
+    Some(match a {
+        Align::Start => AlignItems::FlexStart,
+        Align::Center => AlignItems::Center,
+        Align::End => AlignItems::FlexEnd,
+        _ => AlignItems::Stretch,
+    })
+}
+
+fn align_to_self(a: Align) -> Option<AlignSelf> {
+    match a {
+        Align::Start => Some(AlignSelf::FlexStart),
+        Align::Center => Some(AlignSelf::Center),
+        Align::End => Some(AlignSelf::FlexEnd),
+        _ => None,
+    }
+}
+
+fn overflow_to_taffy(o: Overflow) -> taffy::geometry::Point<taffy::style::Overflow> {
+    let v = match o {
+        Overflow::Visible => taffy::style::Overflow::Visible,
+        Overflow::Hidden => taffy::style::Overflow::Hidden,
+        Overflow::Scroll => taffy::style::Overflow::Scroll,
+    };
+    taffy::geometry::Point { x: v, y: v }
+}
+
+fn style_to_taffy(style: &crate::Style, flex_direction: FlexDirection) -> taffy::Style {
+    taffy::Style {
+        display: Display::Flex,
+        flex_direction,
+        flex_wrap: if style.wrap {
+            FlexWrap::Wrap
+        } else {
+            FlexWrap::NoWrap
+        },
+        position: match style.position {
+            Position::Relative => taffy::style::Position::Relative,
+            Position::Absolute => taffy::style::Position::Absolute,
+        },
+        inset: Rect {
+            left: LengthPercentageAuto::Length(style.inset.left),
+            right: LengthPercentageAuto::Length(style.inset.right),
+            top: LengthPercentageAuto::Length(style.inset.top),
+            bottom: LengthPercentageAuto::Length(style.inset.bottom),
+        },
+        size: taffy::geometry::Size {
+            width: val_to_dimension(&style.width),
+            height: val_to_dimension(&style.height),
+        },
+        min_size: taffy::geometry::Size {
+            width: val_to_dimension(&style.min_width),
+            height: val_to_dimension(&style.min_height),
+        },
+        max_size: taffy::geometry::Size {
+            width: val_to_dimension(&style.max_width),
+            height: val_to_dimension(&style.max_height),
+        },
+        aspect_ratio: style.aspect_ratio,
+        flex_grow: style.grow,
+        flex_shrink: style.shrink.unwrap_or(1.0),
+        flex_basis: val_to_dimension(&style.basis),
+        padding: edges_to_rect_lp(&style.padding),
+        margin: edges_to_rect_lpa(&style.margin),
+        gap: taffy::geometry::Size {
+            width: LengthPercentage::Length(style.gap),
+            height: LengthPercentage::Length(style.gap),
+        },
+        align_self: style.align_self.and_then(align_to_self),
+        overflow: overflow_to_taffy(style.overflow),
+        ..Default::default()
+    }
+}
+
+// build taffy node tree 
+
+fn build_taffy_node(taffy: &mut TaffyTree<()>, element: &Element, fonts: &mut Fonts) -> NodeId {
+    match element {
+        Element::Empty => taffy.new_leaf(taffy::Style::default()).unwrap(),
+
         Element::Text {
             content,
             font,
@@ -383,112 +563,125 @@ fn measure(element: &Element, fonts: &mut Fonts) -> (f32, f32) {
                 Font::Default => fonts.default(),
             };
             let (w, h) = fonts.measure(content, font_id.unwrap());
-            let mw = match style.width.as_ref() {
-                Some(Size::Fill) | Some(Size::Percent(_)) => 0.0,
-                Some(Size::Fixed(v)) => *v,
-                None => w,
-            };
-            let mh = match style.height.as_ref() {
-                Some(Size::Fill) | Some(Size::Percent(_)) => 0.0,
-                Some(Size::Fixed(v)) => *v,
-                None => h,
-            };
-            (
-                mw + style.padding.left + style.padding.right,
-                mh + style.padding.top + style.padding.bottom,
-            )
+            taffy
+                .new_leaf(taffy::Style {
+                    size: taffy::geometry::Size {
+                        width: Dimension::Length(w),
+                        height: Dimension::Length(h),
+                    },
+                    margin: edges_to_rect_lpa(&style.margin),
+                    flex_grow: style.grow,
+                    flex_shrink: 1.0,
+                    align_self: style.align_self.and_then(align_to_self),
+                    ..Default::default()
+                })
+                .unwrap()
         }
-        Element::Row {
-            style, children, ..
-        } => {
-            let mut total_width: f32 = 0.0;
-            let mut max_height: f32 = 0.0;
-            for child in children {
-                let (cw, ch) = measure(child, fonts);
-                total_width += cw;
-                max_height = max_height.max(ch);
-            }
-            let gap_total = if children.is_empty() {
-                0.0
-            } else {
-                style.gap * (children.len() - 1) as f32
-            };
-            (
-                total_width + gap_total + style.padding.left + style.padding.right,
-                max_height + style.padding.top + style.padding.bottom,
-            )
+
+        Element::Rect { style, .. } => {
+            let mut ts = style_to_taffy(style, FlexDirection::Row);
+            ts.justify_content = None;
+            ts.align_items = None;
+            taffy.new_leaf(ts).unwrap()
         }
-        Element::Column {
-            style, children, ..
-        } => {
-            let mut max_width: f32 = 0.0;
-            let mut total_height: f32 = 0.0;
-            for child in children {
-                let (cw, ch) = measure(child, fonts);
-                max_width = max_width.max(cw);
-                total_height += ch;
-            }
-            let gap_total = if children.is_empty() {
-                0.0
-            } else {
-                style.gap * (children.len() - 1) as f32
-            };
-            (
-                max_width + style.padding.left + style.padding.right,
-                total_height + gap_total + style.padding.top + style.padding.bottom,
-            )
-        }
+
         Element::Button { label, style, .. } => {
             let font_id = fonts.default().unwrap();
             let (tw, th) = fonts.measure(label, font_id);
-            let mw = match style.width.as_ref() {
-                Some(Size::Fill) | Some(Size::Percent(_)) => 0.0,
-                Some(Size::Fixed(v)) => *v,
-                None => tw + 24.0,
-            };
-            let mh = match style.height.as_ref() {
-                Some(Size::Fill) | Some(Size::Percent(_)) => 0.0,
-                Some(Size::Fixed(v)) => *v,
-                None => th + 12.0,
-            };
-            (mw + style.padding.left + style.padding.right, mh + style.padding.top + style.padding.bottom)
+            let natural_w = tw + 24.0;
+            let natural_h = th + 12.0;
+            taffy
+                .new_leaf(taffy::Style {
+                    size: taffy::geometry::Size {
+                        width: match &style.width {
+                            Val::Auto => Dimension::Length(natural_w),
+                            other => val_to_dimension(other),
+                        },
+                        height: match &style.height {
+                            Val::Auto => Dimension::Length(natural_h),
+                            other => val_to_dimension(other),
+                        },
+                    },
+                    margin: edges_to_rect_lpa(&style.margin),
+                    flex_grow: style.grow,
+                    flex_shrink: 1.0,
+                    align_self: style.align_self.and_then(align_to_self),
+                    ..Default::default()
+                })
+                .unwrap()
+        }
+
+        Element::Row {
+            style, children, ..
+        } => {
+            let child_nodes: Vec<NodeId> = children
+                .iter()
+                .map(|c| build_taffy_node(taffy, c, fonts))
+                .collect();
+            let mut ts = style_to_taffy(style, FlexDirection::Row);
+            ts.justify_content = align_to_justify(style.align_x);
+            ts.align_items = align_to_items(style.align_y);
+            taffy.new_with_children(ts, &child_nodes).unwrap()
+        }
+
+        Element::Column {
+            style, children, ..
+        } => {
+            let child_nodes: Vec<NodeId> = children
+                .iter()
+                .map(|c| build_taffy_node(taffy, c, fonts))
+                .collect();
+            let mut ts = style_to_taffy(style, FlexDirection::Column);
+            ts.justify_content = align_to_justify(style.align_y);
+            ts.align_items = align_to_items(style.align_x);
+            taffy.new_with_children(ts, &child_nodes).unwrap()
         }
     }
 }
 
-fn layout(
+// apply computed layout back onto elements 
+
+fn apply_layout(
+    taffy: &TaffyTree<()>,
     element: &mut Element,
-    x: f32,
-    y: f32,
-    available_w: f32,
-    available_h: f32,
-    fonts: &mut Fonts,
+    node: NodeId,
+    parent_x: f32,
+    parent_y: f32,
 ) {
+    let layout = taffy.layout(node).unwrap();
+    let x = parent_x + layout.location.x;
+    let y = parent_y + layout.location.y;
+    let w = layout.size.width;
+    let h = layout.size.height;
+
     match element {
         Element::Empty => {}
-        Element::Rect { style, w, h, .. } => {
-            style.x = x + style.padding.left;
-            style.y = y + style.padding.top;
-            *w = available_w - style.padding.left - style.padding.right;
-            *h = available_h - style.padding.top - style.padding.bottom;
-        }
         Element::Text { style, .. } => {
-            style.x = x + style.padding.left;
-            style.y = y + style.padding.top;
+            style.x = x;
+            style.y = y;
         }
-        Element::Button { style, resolved_w, resolved_h, .. } => {
-            style.x = x + style.padding.left;
-            style.y = y + style.padding.top;
-            *resolved_w = match style.width.as_ref() {
-                Some(Size::Fixed(v)) => *v,
-                Some(Size::Fill) | None => available_w - style.padding.left - style.padding.right,
-                Some(Size::Percent(p)) => (available_w - style.padding.left - style.padding.right) * p / 100.0,
-            };
-            *resolved_h = match style.height.as_ref() {
-                Some(Size::Fixed(v)) => *v,
-                Some(Size::Fill) | None => available_h - style.padding.top - style.padding.bottom,
-                Some(Size::Percent(p)) => (available_h - style.padding.top - style.padding.bottom) * p / 100.0,
-            };
+        Element::Rect {
+            style,
+            resolved_w,
+            resolved_h,
+            ..
+        } => {
+            style.x = x;
+            style.y = y;
+            *resolved_w = w;
+            *resolved_h = h;
+        }
+        Element::Button {
+            resolved_x,
+            resolved_y,
+            resolved_w,
+            resolved_h,
+            ..
+        } => {
+            *resolved_x = x;
+            *resolved_y = y;
+            *resolved_w = w;
+            *resolved_h = h;
         }
         Element::Row {
             style,
@@ -498,74 +691,11 @@ fn layout(
         } => {
             style.x = x;
             style.y = y;
-
-            let self_w = available_w;
-            let self_h = available_h;
-
-            *resolved_w = self_w;
-            *resolved_h = self_h;
-
-            let inner_w = self_w - style.padding.left - style.padding.right;
-            let inner_h = self_h - style.padding.top - style.padding.bottom;
-            let gap = style.gap;
-            let last = children.len().saturating_sub(1);
-            let gap_total = gap * last as f32;
-
-            let mut fixed_width: f32 = 0.0;
-            let mut fill_count: u32 = 0;
-            for child in children.iter() {
-                match child_width_sizing(child) {
-                    Size::Fill => fill_count += 1,
-                    Size::Percent(p) => fixed_width += (inner_w - gap_total) * p / 100.0,
-                    Size::Fixed(_) => fixed_width += measure(child, fonts).0,
-                }
-            }
-
-            let remaining = (inner_w - fixed_width - gap_total).max(0.0);
-            let fill_width = if fill_count > 0 {
-                remaining / fill_count as f32
-            } else {
-                0.0
-            };
-
-            let total_children_w: f32 = children
-                .iter()
-                .enumerate()
-                .map(|(i, child)| {
-                    let cw = match child_width_sizing(child) {
-                        Size::Fill => fill_width,
-                        Size::Percent(p) => (inner_w - gap_total) * p / 100.0,
-                        Size::Fixed(_) => measure(child, fonts).0,
-                    };
-                    cw + if i < last { gap } else { 0.0 }
-                })
-                .sum();
-            let x_offset = match style.align_x {
-                Align::Start => 0.0,
-                Align::Center => (inner_w - total_children_w) / 2.0,
-                Align::End => inner_w - total_children_w,
-            };
-
-            let mut cursor_x = x + style.padding.left + x_offset;
-            let base_y = y + style.padding.top;
-            for (i, child) in children.iter_mut().enumerate() {
-                let child_w = match child_width_sizing(child) {
-                    Size::Fill => fill_width,
-                    Size::Percent(p) => (inner_w - gap_total) * p / 100.0,
-                    Size::Fixed(_) => measure(child, fonts).0,
-                };
-                let child_h = match child_height_sizing(child) {
-                    Size::Fill => inner_h,
-                    Size::Percent(p) => inner_h * p / 100.0,
-                    Size::Fixed(_) => measure(child, fonts).1,
-                };
-                let child_y = match style.align_y {
-                    Align::Start => base_y,
-                    Align::Center => base_y + (inner_h - child_h) / 2.0,
-                    Align::End => base_y + inner_h - child_h,
-                };
-                layout(child, cursor_x, child_y, child_w, child_h, fonts);
-                cursor_x += child_w + if i < last { gap } else { 0.0 };
+            *resolved_w = w;
+            *resolved_h = h;
+            let child_nodes = taffy.children(node).unwrap();
+            for (child, child_node) in children.iter_mut().zip(child_nodes.iter()) {
+                apply_layout(taffy, child, *child_node, x, y);
             }
         }
         Element::Column {
@@ -576,104 +706,32 @@ fn layout(
         } => {
             style.x = x;
             style.y = y;
-
-            let self_w = available_w;
-            let self_h = available_h;
-
-            *resolved_w = self_w;
-            *resolved_h = self_h;
-
-            let inner_w = self_w - style.padding.left - style.padding.right;
-            let inner_h = self_h - style.padding.top - style.padding.bottom;
-            let gap = style.gap;
-            let last = children.len().saturating_sub(1);
-            let gap_total = gap * last as f32;
-
-            let mut fixed_height: f32 = 0.0;
-            let mut fill_count: u32 = 0;
-            for child in children.iter() {
-                match child_height_sizing(child) {
-                    Size::Fill => fill_count += 1,
-                    Size::Percent(p) => fixed_height += (inner_h - gap_total) * p / 100.0,
-                    Size::Fixed(_) => fixed_height += measure(child, fonts).1,
-                }
-            }
-
-            let remaining = (inner_h - fixed_height - gap_total).max(0.0);
-            let fill_height = if fill_count > 0 {
-                remaining / fill_count as f32
-            } else {
-                0.0
-            };
-
-            let total_children_h: f32 = children
-                .iter()
-                .enumerate()
-                .map(|(i, child)| {
-                    let ch = match child_height_sizing(child) {
-                        Size::Fill => fill_height,
-                        Size::Percent(p) => (inner_h - gap_total) * p / 100.0,
-                        Size::Fixed(_) => measure(child, fonts).1,
-                    };
-                    ch + if i < last { gap } else { 0.0 }
-                })
-                .sum();
-            let y_offset = match style.align_y {
-                Align::Start => 0.0,
-                Align::Center => (inner_h - total_children_h) / 2.0,
-                Align::End => inner_h - total_children_h,
-            };
-
-            let base_x = x + style.padding.left;
-            let mut cursor_y = y + style.padding.top + y_offset;
-            for (i, child) in children.iter_mut().enumerate() {
-                let child_w = match child_width_sizing(child) {
-                    Size::Fill => inner_w,
-                    Size::Percent(p) => inner_w * p / 100.0,
-                    Size::Fixed(_) => measure(child, fonts).0,
-                };
-                let child_h = match child_height_sizing(child) {
-                    Size::Fill => fill_height,
-                    Size::Percent(p) => (inner_h - gap_total) * p / 100.0,
-                    Size::Fixed(_) => measure(child, fonts).1,
-                };
-                let child_x = match style.align_x {
-                    Align::Start => base_x,
-                    Align::Center => base_x + (inner_w - child_w) / 2.0,
-                    Align::End => base_x + inner_w - child_w,
-                };
-                layout(child, child_x, cursor_y, child_w, child_h, fonts);
-                cursor_y += child_h + if i < last { gap } else { 0.0 };
+            *resolved_w = w;
+            *resolved_h = h;
+            let child_nodes = taffy.children(node).unwrap();
+            for (child, child_node) in children.iter_mut().zip(child_nodes.iter()) {
+                apply_layout(taffy, child, *child_node, x, y);
             }
         }
     }
 }
 
-fn measure_children_width(children: &[Element], style: &crate::Style, fonts: &mut Fonts) -> f32 {
-    let mut total = 0.0f32;
-    for child in children {
-        total += measure(child, fonts).0;
-    }
-    let gap_total = if children.is_empty() {
-        0.0
-    } else {
-        style.gap * (children.len() - 1) as f32
-    };
-    total + gap_total + style.padding.left + style.padding.right
+fn do_layout(element: &mut Element, width: f32, height: f32, fonts: &mut Fonts) {
+    let mut taffy: TaffyTree<()> = TaffyTree::new();
+    let root = build_taffy_node(&mut taffy, element, fonts);
+    taffy
+        .compute_layout(
+            root,
+            taffy::geometry::Size {
+                width: AvailableSpace::Definite(width),
+                height: AvailableSpace::Definite(height),
+            },
+        )
+        .unwrap();
+    apply_layout(&taffy, element, root, 0.0, 0.0);
 }
 
-fn measure_children_height(children: &[Element], style: &crate::Style, fonts: &mut Fonts) -> f32 {
-    let mut total = 0.0f32;
-    for child in children {
-        total += measure(child, fonts).1;
-    }
-    let gap_total = if children.is_empty() {
-        0.0
-    } else {
-        style.gap * (children.len() - 1) as f32
-    };
-    total + gap_total + style.padding.top + style.padding.bottom
-}
+// winit ApplicationHandler 
 
 impl<A: App> ApplicationHandler for Runner<A> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -712,16 +770,13 @@ impl<A: App> ApplicationHandler for Runner<A> {
         }
 
         let mut fonts = Fonts::new();
-        // run user fonts function
         self.app.fonts(&mut fonts);
         if fonts.default().is_none() {
-            println!("No default font found, adding default font...");
             let default_font_id = fonts.add("default", "Arial", 14.0);
             fonts.set_default(default_font_id);
         }
 
         self.fonts = Some(fonts);
-
         self.window().request_redraw();
     }
 
@@ -729,7 +784,6 @@ impl<A: App> ApplicationHandler for Runner<A> {
         if self.window.is_none() {
             return;
         }
-
         event_loop.set_control_flow(ControlFlow::Wait);
 
         match event {

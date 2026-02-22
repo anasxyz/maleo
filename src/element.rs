@@ -1,21 +1,39 @@
-use crate::{Color, Font, FontId};
+use crate::{Color, Font};
 
-#[derive(Clone, Copy, PartialEq)]
+// alignment 
+
+#[derive(Clone, Copy, PartialEq, Default)]
 pub enum Align {
+    #[default]
     Start,
     Center,
     End,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
 }
 
-#[derive(Clone, Copy)]
-pub struct Padding {
+// val
+
+#[derive(Clone, Default)]
+pub enum Val {
+    #[default]
+    Auto,
+    Px(f32),
+    Percent(f32),
+}
+
+// edges, used for padding, margin, inset, etc
+
+#[derive(Clone, Copy, Default)]
+pub struct Edges {
     pub top: f32,
     pub right: f32,
     pub bottom: f32,
     pub left: f32,
 }
 
-impl Padding {
+impl Edges {
     pub fn all(v: f32) -> Self {
         Self {
             top: v,
@@ -74,105 +92,84 @@ impl Padding {
     }
 }
 
-#[derive(Clone)]
-pub enum Size {
-    Fixed(f32),
-    Fill,
-    Percent(f32),
+// keep padding as an alias for backwards compat and ergonomics
+pub type Padding = Edges;
+
+// position 
+
+#[derive(Clone, Copy, PartialEq, Default)]
+pub enum Position {
+    #[default]
+    Relative,
+    Absolute,
 }
 
-impl Size {
-    pub fn fixed(v: f32) -> Self {
-        Size::Fixed(v)
-    }
-    pub fn fill() -> Self {
-        Size::Fill
-    }
-    pub fn percent(v: f32) -> Self {
-        Size::Percent(v)
-    }
+// overflow 
+
+#[derive(Clone, Copy, PartialEq, Default)]
+pub enum Overflow {
+    #[default]
+    Visible,
+    Hidden,
+    Scroll,
 }
 
-#[derive(Clone)]
+// style 
+
+#[derive(Clone, Default)]
 pub struct Style {
+    // resolved position 
+    // this is set by layout, not by user
     pub x: f32,
     pub y: f32,
-    pub width: Option<Size>,
-    pub height: Option<Size>,
-    pub min_width: Option<f32>,
-    pub max_width: Option<f32>,
-    pub min_height: Option<f32>,
-    pub max_height: Option<f32>,
-    pub padding: Padding,
+
+    // sizing
+    pub width: Val,
+    pub height: Val,
+    pub min_width: Val,
+    pub max_width: Val,
+    pub min_height: Val,
+    pub max_height: Val,
+    pub aspect_ratio: Option<f32>,
+
+    // flex
+    pub grow: f32,
+    pub shrink: Option<f32>,
+    pub basis: Val,
+    pub wrap: bool,
+
+    // alignment (on containers)
     pub align_x: Align,
     pub align_y: Align,
+
+    // alignment (
+    // this is on self, overrides parentss align_items
+    pub align_self: Option<Align>,
+
+    // spacing
+    pub padding: Edges,
+    pub margin: Edges,
     pub gap: f32,
+
+    // position
+    pub position: Position,
+    pub inset: Edges,
+
+    // visuals
     pub background: Option<Color>,
+    pub overflow: Overflow,
 }
 
-impl Default for Style {
-    fn default() -> Self {
-        Self {
-            x: 0.0,
-            y: 0.0,
-            width: None,
-            height: None,
-            min_width: None,
-            max_width: None,
-            min_height: None,
-            max_height: None,
-            padding: Padding::all(0.0),
-            align_x: Align::Start,
-            align_y: Align::Start,
-            gap: 0.0,
-            background: None,
-        }
-    }
-}
-
-impl Default for Align {
-    fn default() -> Self {
-        Align::Start
-    }
-}
-
-impl Default for Padding {
-    fn default() -> Self {
-        Self::all(0.0)
-    }
-}
-
-impl Style {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-pub struct Callbacks {
-    pub on_click: Option<Box<dyn FnMut()>>,
-    pub on_hover: Option<Box<dyn FnMut()>>,
-    pub on_just_hovered: Option<Box<dyn FnMut()>>,
-    pub on_just_unhovered: Option<Box<dyn FnMut()>>,
-}
-
-impl Callbacks {
-    pub fn none() -> Self {
-        Self {
-            on_click: None,
-            on_hover: None,
-            on_just_hovered: None,
-            on_just_unhovered: None,
-        }
-    }
-}
+// element 
 
 pub enum Element {
+    Empty,
     Rect {
-        w: f32,
-        h: f32,
         color: Color,
         style: Style,
-        callbacks: Callbacks,
+        // resolved by layout
+        resolved_w: f32,
+        resolved_h: f32,
     },
     Text {
         content: String,
@@ -180,27 +177,33 @@ pub enum Element {
         font: Font,
         style: Style,
     },
+    Button {
+        label: String,
+        style: Style,
+        on_click: Option<Box<dyn FnMut()>>,
+        // resolved by layout
+        resolved_x: f32,
+        resolved_y: f32,
+        resolved_w: f32,
+        resolved_h: f32,
+    },
     Row {
         style: Style,
         children: Vec<Element>,
+        // resolved by layout
         resolved_w: f32,
         resolved_h: f32,
     },
     Column {
         style: Style,
         children: Vec<Element>,
+        // resolved by layout
         resolved_w: f32,
         resolved_h: f32,
     },
-    Button {
-        label: String,
-        style: Style,
-        resolved_w: f32,
-        resolved_h: f32,
-        on_click: Option<Box<dyn FnMut()>>,
-    },
-    Empty,
 }
+
+// builder impl 
 
 impl Element {
     fn style_mut(&mut self) -> Option<&mut Style> {
@@ -214,83 +217,159 @@ impl Element {
         }
     }
 
-    pub fn width(mut self, s: Size) -> Self {
-        if let Some(st) = self.style_mut() {
-            st.width = Some(s);
+    // sizing
+    pub fn width(mut self, v: Val) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.width = v;
+        }
+        self
+    }
+    pub fn height(mut self, v: Val) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.height = v;
+        }
+        self
+    }
+    pub fn min_width(mut self, v: Val) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.min_width = v;
+        }
+        self
+    }
+    pub fn max_width(mut self, v: Val) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.max_width = v;
+        }
+        self
+    }
+    pub fn min_height(mut self, v: Val) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.min_height = v;
+        }
+        self
+    }
+    pub fn max_height(mut self, v: Val) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.max_height = v;
+        }
+        self
+    }
+    pub fn aspect_ratio(mut self, ratio: f32) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.aspect_ratio = Some(ratio);
         }
         self
     }
 
-    pub fn height(mut self, s: Size) -> Self {
-        if let Some(st) = self.style_mut() {
-            st.height = Some(s);
+    // flex
+    pub fn grow(mut self, v: f32) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.grow = v;
+        }
+        self
+    }
+    pub fn shrink(mut self, v: f32) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.shrink = Some(v);
+        }
+        self
+    }
+    pub fn basis(mut self, v: Val) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.basis = v;
+        }
+        self
+    }
+    pub fn wrap(mut self) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.wrap = true;
         }
         self
     }
 
-    pub fn min_width(mut self, v: f32) -> Self {
-        if let Some(st) = self.style_mut() {
-            st.min_width = Some(v);
-        }
-        self
-    }
-
-    pub fn max_width(mut self, v: f32) -> Self {
-        if let Some(st) = self.style_mut() {
-            st.max_width = Some(v);
-        }
-        self
-    }
-
-    pub fn min_height(mut self, v: f32) -> Self {
-        if let Some(st) = self.style_mut() {
-            st.min_height = Some(v);
-        }
-        self
-    }
-
-    pub fn max_height(mut self, v: f32) -> Self {
-        if let Some(st) = self.style_mut() {
-            st.max_height = Some(v);
-        }
-        self
-    }
-
-    pub fn padding(mut self, p: Padding) -> Self {
-        if let Some(st) = self.style_mut() {
-            st.padding = p;
-        }
-        self
-    }
-
+    // alignment
     pub fn align_x(mut self, a: Align) -> Self {
-        if let Some(st) = self.style_mut() {
-            st.align_x = a;
+        if let Some(s) = self.style_mut() {
+            s.align_x = a;
         }
         self
     }
-
     pub fn align_y(mut self, a: Align) -> Self {
-        if let Some(st) = self.style_mut() {
-            st.align_y = a;
+        if let Some(s) = self.style_mut() {
+            s.align_y = a;
+        }
+        self
+    }
+    pub fn align_self(mut self, a: Align) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.align_self = Some(a);
         }
         self
     }
 
-    pub fn gap(mut self, gap: f32) -> Self {
-        if let Some(st) = self.style_mut() {
-            st.gap = gap;
+    // spacing
+    pub fn padding(mut self, e: Edges) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.padding = e;
+        }
+        self
+    }
+    pub fn margin(mut self, e: Edges) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.margin = e;
+        }
+        self
+    }
+    pub fn gap(mut self, v: f32) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.gap = v;
         }
         self
     }
 
+    // position
+    pub fn absolute(mut self) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.position = Position::Absolute;
+        }
+        self
+    }
+    pub fn inset(mut self, e: Edges) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.inset = e;
+        }
+        self
+    }
+
+    // visuals
     pub fn background(mut self, color: Color) -> Self {
-        if let Some(st) = self.style_mut() {
-            st.background = Some(color);
+        if let Some(s) = self.style_mut() {
+            s.background = Some(color);
+        }
+        self
+    }
+    pub fn overflow_hidden(mut self) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.overflow = Overflow::Hidden;
+        }
+        self
+    }
+    pub fn overflow_scroll(mut self) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.overflow = Overflow::Scroll;
         }
         self
     }
 
+    // font (text only)
+    pub fn font(mut self, font_: Font) -> Self {
+        if let Element::Text { ref mut font, .. } = self {
+            *font = font_;
+        }
+        self
+    }
+
+    // on_click
     pub fn on_click(mut self, f: impl FnMut() + 'static) -> Self {
         if let Element::Button {
             ref mut on_click, ..
@@ -300,22 +379,18 @@ impl Element {
         }
         self
     }
-
-    pub fn font(mut self, font_: Font) -> Self {
-        if let Element::Text { ref mut font, .. } = self {
-            *font = font_;
-        }
-        self
-    }
 }
 
-pub fn rect(w: f32, h: f32, color: Color) -> Element {
+pub fn empty() -> Element {
+    Element::Empty
+}
+
+pub fn rect(color: Color) -> Element {
     Element::Rect {
-        w,
-        h,
         color,
-        style: Style::new(),
-        callbacks: Callbacks::none(),
+        style: Style::default(),
+        resolved_w: 0.0,
+        resolved_h: 0.0,
     }
 }
 
@@ -324,13 +399,25 @@ pub fn text(content: &str, color: Color) -> Element {
         content: content.to_string(),
         color,
         font: Font::Default,
-        style: Style::new(),
+        style: Style::default(),
+    }
+}
+
+pub fn button(label: &str) -> Element {
+    Element::Button {
+        label: label.to_string(),
+        style: Style::default(),
+        on_click: None,
+        resolved_x: 0.0,
+        resolved_y: 0.0,
+        resolved_w: 0.0,
+        resolved_h: 0.0,
     }
 }
 
 pub fn row(children: Vec<Element>) -> Element {
     Element::Row {
-        style: Style::new(),
+        style: Style::default(),
         children,
         resolved_w: 0.0,
         resolved_h: 0.0,
@@ -339,25 +426,11 @@ pub fn row(children: Vec<Element>) -> Element {
 
 pub fn column(children: Vec<Element>) -> Element {
     Element::Column {
-        style: Style::new(),
+        style: Style::default(),
         children,
         resolved_w: 0.0,
         resolved_h: 0.0,
     }
-}
-
-pub fn button(label: &str) -> Element {
-    Element::Button {
-        label: label.to_string(),
-        style: Style::new(),
-        resolved_w: 0.0,
-        resolved_h: 0.0,
-        on_click: None,
-    }
-}
-
-pub fn empty() -> Element {
-    Element::Empty
 }
 
 pub fn exit() {

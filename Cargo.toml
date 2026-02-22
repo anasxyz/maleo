@@ -9,6 +9,7 @@ glyphon = "0.9"
 bytemuck = { version = "1.14", features = ["derive"] }
 winit = "0.30"
 pollster = "0.3"
+taffy = "0.5"
 
 [dev-dependencies]
 winit = "0.30"

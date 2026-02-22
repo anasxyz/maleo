@@ -2,33 +2,30 @@
 
 use bento::*;
 
-struct MyApp {
-    sidebar_visible: bool,
-}
+struct MyApp {}
 
 impl App for MyApp {
     fn new() -> Self {
-        Self {
-            sidebar_visible: true,
-        }
+        Self {}
     }
 
     fn update(&mut self, events: &Events) -> Element {
-        if events.keyboard.is_just_pressed(Key::L) {
-            self.sidebar_visible = !self.sidebar_visible;
-        }
-
-        column(vec![
-            if self.sidebar_visible {
-                button("Hello")
-            } else {
-                empty()
-            }
+        row(vec![
+            rect(Color::RED)
+                .width(Val::Percent(100.0))
+                .height(Val::Px(100.0)),
+            rect(Color::GREEN)
+                .width(Val::Px(100.0))
+                .height(Val::Px(100.0)),
+            rect(Color::BLUE)
+                .width(Val::Px(100.0))
+                .height(Val::Px(100.0)),
         ])
-        .gap(8.0)
+        .width(Val::Percent(100.0))
+        .gap(16.0)
     }
 }
 
 fn main() {
-    MyApp::run(Settings::default().title("Bento Dashboard"));
+    MyApp::run(Settings::default().title("Bento UI"));
 }
