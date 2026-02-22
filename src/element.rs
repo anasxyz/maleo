@@ -1,6 +1,6 @@
 use crate::{Color, Font};
 
-// alignment 
+// alignment
 
 #[derive(Clone, Copy, PartialEq, Default)]
 pub enum Align {
@@ -95,7 +95,7 @@ impl Edges {
 // keep padding as an alias for backwards compat and ergonomics
 pub type Padding = Edges;
 
-// position 
+// position
 
 #[derive(Clone, Copy, PartialEq, Default)]
 pub enum Position {
@@ -104,7 +104,7 @@ pub enum Position {
     Absolute,
 }
 
-// overflow 
+// overflow
 
 #[derive(Clone, Copy, PartialEq, Default)]
 pub enum Overflow {
@@ -114,11 +114,11 @@ pub enum Overflow {
     Scroll,
 }
 
-// style 
+// style
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Style {
-    // resolved position 
+    // resolved position
     // this is set by layout, not by user
     pub x: f32,
     pub y: f32,
@@ -160,10 +160,45 @@ pub struct Style {
     pub border_radius: f32,
     pub border_color: Option<Color>,
     pub border_thickness: f32,
+    pub opacity: f32,
     pub overflow: Overflow,
 }
 
-// element 
+impl Default for Style {
+    fn default() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            width: Val::Auto,
+            height: Val::Auto,
+            min_width: Val::Auto,
+            max_width: Val::Auto,
+            min_height: Val::Auto,
+            max_height: Val::Auto,
+            aspect_ratio: None,
+            grow: 0.0,
+            shrink: None,
+            basis: Val::Auto,
+            wrap: false,
+            align_x: Align::Start,
+            align_y: Align::Start,
+            align_self: None,
+            padding: Edges::default(),
+            margin: Edges::default(),
+            gap: 0.0,
+            position: Position::Relative,
+            inset: Edges::default(),
+            background: None,
+            border_radius: 0.0,
+            border_color: None,
+            border_thickness: 0.0,
+            opacity: 1.0,
+            overflow: Overflow::Visible,
+        }
+    }
+}
+
+// element
 
 pub enum Element {
     Empty,
@@ -206,7 +241,7 @@ pub enum Element {
     },
 }
 
-// builder impl 
+// builder impl
 
 impl Element {
     fn style_mut(&mut self) -> Option<&mut Style> {
@@ -361,6 +396,12 @@ impl Element {
         if let Some(s) = self.style_mut() {
             s.border_color = Some(color);
             s.border_thickness = thickness;
+        }
+        self
+    }
+    pub fn opacity(mut self, v: f32) -> Self {
+        if let Some(s) = self.style_mut() {
+            s.opacity = v;
         }
         self
     }

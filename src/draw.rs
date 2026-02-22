@@ -37,9 +37,9 @@ fn draw_clipped(
                 style.y,
                 *resolved_w,
                 *resolved_h,
-                color.to_array(),
+                with_opacity(color.to_array(), style.opacity),
                 style.border_radius,
-                border,
+                with_opacity(border, style.opacity),
                 style.border_thickness,
                 clip,
             );
@@ -123,9 +123,9 @@ fn draw_clipped(
                 *resolved_y,
                 *resolved_w,
                 *resolved_h,
-                bg.to_array(),
+                with_opacity(bg.to_array(), style.opacity),
                 style.border_radius,
-                border,
+                with_opacity(border, style.opacity),
                 style.border_thickness,
                 clip,
             );
@@ -168,9 +168,9 @@ fn draw_clipped(
                     style.y,
                     *resolved_w,
                     *resolved_h,
-                    bg.to_array(),
+                    with_opacity(bg.to_array(), style.opacity),
                     style.border_radius,
-                    border,
+                    with_opacity(border, style.opacity),
                     style.border_thickness,
                     clip,
                 );
@@ -202,9 +202,9 @@ fn draw_clipped(
                     style.y,
                     *resolved_w,
                     *resolved_h,
-                    bg.to_array(),
+                    with_opacity(bg.to_array(), style.opacity),
                     style.border_radius,
-                    border,
+                    with_opacity(border, style.opacity),
                     style.border_thickness,
                     clip,
                 );
@@ -233,11 +233,11 @@ fn draw_shape(
     color: [f32; 4],
     border_radius: f32,
     border_color: [f32; 4],
-    border_thickness: f32,
+    border_width: f32,
     clip: Option<[f32; 4]>,
 ) {
     let outline_color = border_color;
-    let outline_thickness = border_thickness;
+    let outline_thickness = border_width;
     if border_radius > 0.0 {
         if let Some([cx, cy, cx2, cy2]) = clip {
             if x < cx || y < cy || x + w > cx2 || y + h > cy2 {
@@ -292,4 +292,9 @@ fn make_child_clip(
     } else {
         parent_clip
     }
+}
+
+fn with_opacity(mut color: [f32; 4], opacity: f32) -> [f32; 4] {
+    color[3] *= opacity;
+    color
 }
