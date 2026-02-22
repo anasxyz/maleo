@@ -10,6 +10,8 @@ bytemuck = { version = "1.14", features = ["derive"] }
 winit = "0.30"
 pollster = "0.3"
 taffy = "0.5"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
 
 [dev-dependencies]
 winit = "0.30"

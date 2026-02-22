@@ -1,34 +1,44 @@
 use crate::{
-    Color, Element, Events, Fonts, Overflow, ShadowRenderer, ShapeRenderer, TextAlign, TextRenderer,
+    Color, Element, Fonts, Overflow, ShadowRenderer, ShapeRenderer, TextAlign, TextRenderer,
 };
 
-pub fn draw(
-    element: &mut Element,
+pub fn draw<M: Clone + 'static>(
+    element: &mut Element<M>,
     shape_renderer: &mut ShapeRenderer,
     shadow_renderer: &mut ShadowRenderer,
     text_renderer: &mut TextRenderer,
     fonts: &mut Fonts,
-    events: &Events,
-) {
+    mouse_x: f32,
+    mouse_y: f32,
+    left_just_pressed: bool,
+) -> Vec<M> {
+    let mut actions: Vec<M> = Vec::new();
     draw_clipped(
         element,
         shape_renderer,
         shadow_renderer,
         text_renderer,
         fonts,
-        events,
+        mouse_x,
+        mouse_y,
+        left_just_pressed,
         None,
+        &mut actions,
     );
+    actions
 }
 
-fn draw_clipped(
-    element: &mut Element,
+fn draw_clipped<M: Clone + 'static>(
+    element: &mut Element<M>,
     sr: &mut ShapeRenderer,
     shadow: &mut ShadowRenderer,
     tr: &mut TextRenderer,
     fonts: &mut Fonts,
-    events: &Events,
+    mouse_x: f32,
+    mouse_y: f32,
+    left_just_pressed: bool,
     clip: Option<[f32; 4]>,
+    actions: &mut Vec<M>,
 ) {
     match element {
         Element::Empty => {}
@@ -112,10 +122,11 @@ fn draw_clipped(
                 return;
             }
 
-            let hovered = events
-                .mouse
-                .over(*resolved_x, *resolved_y, *resolved_w, *resolved_h);
-            let clicked = hovered && events.mouse.left_just_pressed;
+            let hovered = mouse_x >= *resolved_x
+                && mouse_x <= *resolved_x + *resolved_w
+                && mouse_y >= *resolved_y
+                && mouse_y <= *resolved_y + *resolved_h;
+            let clicked = hovered && left_just_pressed;
 
             let bg = if clicked {
                 style
@@ -191,8 +202,8 @@ fn draw_clipped(
             );
 
             if clicked {
-                if let Some(cb) = on_click {
-                    cb();
+                if let Some(action) = on_click {
+                    actions.push(action.clone());
                 }
             }
         }
@@ -228,7 +239,18 @@ fn draw_clipped(
                 clip,
             );
             for child in children {
-                draw_clipped(child, sr, shadow, tr, fonts, events, child_clip);
+                draw_clipped(
+                    child,
+                    sr,
+                    shadow,
+                    tr,
+                    fonts,
+                    mouse_x,
+                    mouse_y,
+                    left_just_pressed,
+                    child_clip,
+                    actions,
+                );
             }
         }
 
@@ -263,7 +285,18 @@ fn draw_clipped(
                 clip,
             );
             for child in children {
-                draw_clipped(child, sr, shadow, tr, fonts, events, child_clip);
+                draw_clipped(
+                    child,
+                    sr,
+                    shadow,
+                    tr,
+                    fonts,
+                    mouse_x,
+                    mouse_y,
+                    left_just_pressed,
+                    child_clip,
+                    actions,
+                );
             }
         }
     }

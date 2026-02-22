@@ -1,118 +1,60 @@
-use std::collections::HashSet;
 use winit::keyboard::KeyCode;
 
-#[derive(Debug)]
-pub struct Mouse {
-    pub x: f32,
-    pub y: f32,
-    pub dx: f32,
-    pub dy: f32,
+// discrete event — one thing that happened, fired once
+#[derive(Debug, Clone)]
+pub enum Event {
+    // keyboard — modifiers baked in so combos work cleanly
+    KeyPressed {
+        key: Key,
+        ctrl: bool,
+        shift: bool,
+        alt: bool,
+    },
+    KeyReleased {
+        key: Key,
+        ctrl: bool,
+        shift: bool,
+        alt: bool,
+    },
 
-    pub left_pressed: bool,
-    pub left_just_pressed: bool,
-    pub left_just_released: bool,
+    // mouse
+    MouseMoved {
+        x: f32,
+        y: f32,
+        dx: f32,
+        dy: f32,
+    },
+    MousePressed {
+        button: MouseButton,
+        x: f32,
+        y: f32,
+    },
+    MouseReleased {
+        button: MouseButton,
+        x: f32,
+        y: f32,
+    },
+    MouseScrolled {
+        x: f32,
+        y: f32,
+    },
 
-    pub right_pressed: bool,
-    pub right_just_pressed: bool,
-    pub right_just_released: bool,
-
-    pub middle_pressed: bool,
-    pub middle_just_pressed: bool,
-    pub middle_just_released: bool,
-
-    pub scroll_x: f32,
-    pub scroll_y: f32,
+    // window
+    Resized {
+        width: f32,
+        height: f32,
+    },
+    ScaleChanged(f64),
+    Focused,
+    Unfocused,
+    CloseRequested,
 }
 
-impl Mouse {
-    pub fn over(&self, x: f32, y: f32, w: f32, h: f32) -> bool {
-        self.x >= x && self.x <= x + w && self.y >= y && self.y <= y + h
-    }
-}
-
-impl Default for Mouse {
-    fn default() -> Self {
-        Self {
-            x: 0.0,
-            y: 0.0,
-            dx: 0.0,
-            dy: 0.0,
-            left_pressed: false,
-            left_just_pressed: false,
-            left_just_released: false,
-            right_pressed: false,
-            right_just_pressed: false,
-            right_just_released: false,
-            middle_pressed: false,
-            middle_just_pressed: false,
-            middle_just_released: false,
-            scroll_x: 0.0,
-            scroll_y: 0.0,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Keyboard {
-    pub pressed: HashSet<Key>,
-    pub just_pressed: HashSet<Key>,
-    pub just_released: HashSet<Key>,
-}
-
-impl Keyboard {
-    pub fn is_pressed(&self, key: Key) -> bool {
-        self.pressed.contains(&key)
-    }
-
-    pub fn is_just_pressed(&self, key: Key) -> bool {
-        self.just_pressed.contains(&key)
-    }
-
-    pub fn is_just_released(&self, key: Key) -> bool {
-        self.just_released.contains(&key)
-    }
-}
-
-impl Default for Keyboard {
-    fn default() -> Self {
-        Self {
-            pressed: HashSet::new(),
-            just_pressed: HashSet::new(),
-            just_released: HashSet::new(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Events {
-    pub mouse: Mouse,
-    pub keyboard: Keyboard,
-}
-
-impl Default for Events {
-    fn default() -> Self {
-        Self {
-            mouse: Mouse::default(),
-            keyboard: Keyboard::default(),
-        }
-    }
-}
-
-impl Events {
-    pub(crate) fn clear_frame_state(&mut self) {
-        self.mouse.dx = 0.0;
-        self.mouse.dy = 0.0;
-        self.mouse.left_just_pressed = false;
-        self.mouse.left_just_released = false;
-        self.mouse.right_just_pressed = false;
-        self.mouse.right_just_released = false;
-        self.mouse.middle_just_pressed = false;
-        self.mouse.middle_just_released = false;
-        self.mouse.scroll_x = 0.0;
-        self.mouse.scroll_y = 0.0;
-        self.keyboard.just_pressed.clear();
-        self.keyboard.just_released.clear();
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseButton {
+    Left,
+    Right,
+    Middle,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -144,6 +86,7 @@ pub enum Key {
     X,
     Y,
     Z,
+    Num0,
     Num1,
     Num2,
     Num3,
@@ -153,8 +96,21 @@ pub enum Key {
     Num7,
     Num8,
     Num9,
-    Num0,
-    Escape,
+    Numpad0,
+    Numpad1,
+    Numpad2,
+    Numpad3,
+    Numpad4,
+    Numpad5,
+    Numpad6,
+    Numpad7,
+    Numpad8,
+    Numpad9,
+    NumpadAdd,
+    NumpadSubtract,
+    NumpadMultiply,
+    NumpadDivide,
+    NumpadDecimal,
     F1,
     F2,
     F3,
@@ -180,10 +136,10 @@ pub enum Key {
     F23,
     F24,
     LControl,
-    LShift,
-    LAlt,
     RControl,
+    LShift,
     RShift,
+    LAlt,
     RAlt,
     LBracket,
     RBracket,
@@ -200,6 +156,7 @@ pub enum Key {
     Backspace,
     Delete,
     Insert,
+    Escape,
     Home,
     End,
     PageUp,
@@ -208,82 +165,61 @@ pub enum Key {
     Down,
     Left,
     Right,
-    Numpad0,
-    Numpad1,
-    Numpad2,
-    Numpad3,
-    Numpad4,
-    Numpad5,
-    Numpad6,
-    Numpad7,
-    Numpad8,
-    Numpad9,
-    NumpadDivide,
-    NumpadMultiply,
-    NumpadSubtract,
-    NumpadAdd,
-    NumpadDecimal,
 }
 
 impl std::fmt::Display for Key {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Key::Enter => write!(f, "\r\n"),
-            Key::Space => write!(f, " "),
-            Key::Comma => write!(f, ","),
-            Key::Quote => write!(f, "'"),
-            Key::A => write!(f, "a"),
-            Key::B => write!(f, "b"),
-            Key::C => write!(f, "c"),
-            Key::D => write!(f, "d"),
-            Key::E => write!(f, "e"),
-            Key::F => write!(f, "f"),
-            Key::G => write!(f, "g"),
-            Key::H => write!(f, "h"),
-            Key::I => write!(f, "i"),
-            Key::J => write!(f, "j"),
-            Key::K => write!(f, "k"),
-            Key::L => write!(f, "l"),
-            Key::M => write!(f, "m"),
-            Key::N => write!(f, "n"),
-            Key::O => write!(f, "o"),
-            Key::P => write!(f, "p"),
-            Key::Q => write!(f, "q"),
-            Key::R => write!(f, "r"),
-            Key::S => write!(f, "s"),
-            Key::T => write!(f, "t"),
-            Key::U => write!(f, "u"),
-            Key::V => write!(f, "v"),
-            Key::W => write!(f, "w"),
-            Key::X => write!(f, "x"),
-            Key::Y => write!(f, "y"),
-            Key::Z => write!(f, "z"),
-            Key::Num0 => write!(f, "0"),
-            Key::Num1 => write!(f, "1"),
-            Key::Num2 => write!(f, "2"),
-            Key::Num3 => write!(f, "3"),
-            Key::Num4 => write!(f, "4"),
-            Key::Num5 => write!(f, "5"),
-            Key::Num6 => write!(f, "6"),
-            Key::Num7 => write!(f, "7"),
-            Key::Num8 => write!(f, "8"),
-            Key::Num9 => write!(f, "9"),
-            Key::Numpad0 => write!(f, "0"),
-            Key::Numpad1 => write!(f, "1"),
-            Key::Numpad2 => write!(f, "2"),
-            Key::Numpad3 => write!(f, "3"),
-            Key::Numpad4 => write!(f, "4"),
-            Key::Numpad5 => write!(f, "5"),
-            Key::Numpad6 => write!(f, "6"),
-            Key::Numpad7 => write!(f, "7"),
-            Key::Numpad8 => write!(f, "8"),
-            Key::Numpad9 => write!(f, "9"),
-            _ => write!(f, ""),
-        }
+        let s = match self {
+            Key::A => "a",
+            Key::B => "b",
+            Key::C => "c",
+            Key::D => "d",
+            Key::E => "e",
+            Key::F => "f",
+            Key::G => "g",
+            Key::H => "h",
+            Key::I => "i",
+            Key::J => "j",
+            Key::K => "k",
+            Key::L => "l",
+            Key::M => "m",
+            Key::N => "n",
+            Key::O => "o",
+            Key::P => "p",
+            Key::Q => "q",
+            Key::R => "r",
+            Key::S => "s",
+            Key::T => "t",
+            Key::U => "u",
+            Key::V => "v",
+            Key::W => "w",
+            Key::X => "x",
+            Key::Y => "y",
+            Key::Z => "z",
+            Key::Num0 | Key::Numpad0 => "0",
+            Key::Num1 | Key::Numpad1 => "1",
+            Key::Num2 | Key::Numpad2 => "2",
+            Key::Num3 | Key::Numpad3 => "3",
+            Key::Num4 | Key::Numpad4 => "4",
+            Key::Num5 | Key::Numpad5 => "5",
+            Key::Num6 | Key::Numpad6 => "6",
+            Key::Num7 | Key::Numpad7 => "7",
+            Key::Num8 | Key::Numpad8 => "8",
+            Key::Num9 | Key::Numpad9 => "9",
+            Key::Space => " ",
+            Key::Enter => "\r\n",
+            Key::Comma => ",",
+            Key::Period => ".",
+            Key::Quote => "'",
+            Key::Slash => "/",
+            Key::Minus => "-",
+            Key::Equal => "=",
+            _ => "",
+        };
+        write!(f, "{}", s)
     }
 }
 
-// winit KeyCode to my Key enum
 pub fn key_code_to_key(key: KeyCode) -> Key {
     match key {
         KeyCode::KeyA => Key::A,
@@ -332,12 +268,11 @@ pub fn key_code_to_key(key: KeyCode) -> Key {
         KeyCode::Numpad7 => Key::Numpad7,
         KeyCode::Numpad8 => Key::Numpad8,
         KeyCode::Numpad9 => Key::Numpad9,
-        KeyCode::NumpadDivide => Key::NumpadDivide,
-        KeyCode::NumpadMultiply => Key::NumpadMultiply,
-        KeyCode::NumpadSubtract => Key::NumpadSubtract,
         KeyCode::NumpadAdd => Key::NumpadAdd,
+        KeyCode::NumpadSubtract => Key::NumpadSubtract,
+        KeyCode::NumpadMultiply => Key::NumpadMultiply,
+        KeyCode::NumpadDivide => Key::NumpadDivide,
         KeyCode::NumpadDecimal => Key::NumpadDecimal,
-        KeyCode::Escape => Key::Escape,
         KeyCode::F1 => Key::F1,
         KeyCode::F2 => Key::F2,
         KeyCode::F3 => Key::F3,
@@ -363,10 +298,10 @@ pub fn key_code_to_key(key: KeyCode) -> Key {
         KeyCode::F23 => Key::F23,
         KeyCode::F24 => Key::F24,
         KeyCode::ControlLeft => Key::LControl,
-        KeyCode::ShiftLeft => Key::LShift,
-        KeyCode::AltLeft => Key::LAlt,
         KeyCode::ControlRight => Key::RControl,
+        KeyCode::ShiftLeft => Key::LShift,
         KeyCode::ShiftRight => Key::RShift,
+        KeyCode::AltLeft => Key::LAlt,
         KeyCode::AltRight => Key::RAlt,
         KeyCode::BracketLeft => Key::LBracket,
         KeyCode::BracketRight => Key::RBracket,
@@ -383,6 +318,7 @@ pub fn key_code_to_key(key: KeyCode) -> Key {
         KeyCode::Backspace => Key::Backspace,
         KeyCode::Delete => Key::Delete,
         KeyCode::Insert => Key::Insert,
+        KeyCode::Escape => Key::Escape,
         KeyCode::Home => Key::Home,
         KeyCode::End => Key::End,
         KeyCode::PageUp => Key::PageUp,

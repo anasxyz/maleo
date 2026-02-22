@@ -103,8 +103,7 @@ impl Edges {
 // keep padding as an alias for backwards compat and ergonomics
 pub type Padding = Edges;
 
-// margin
-// each side can be a value or auto
+// margin — each side can be a value or auto
 #[derive(Clone, Copy, Default)]
 pub struct Margin {
     pub top: Option<f32>,
@@ -309,12 +308,11 @@ impl Default for Style {
 
 // element
 
-pub enum Element {
+pub enum Element<M: Clone + 'static = ()> {
     Empty,
     Rect {
         color: Color,
         style: Style,
-        // resolved by layout
         resolved_w: f32,
         resolved_h: f32,
     },
@@ -331,8 +329,7 @@ pub enum Element {
     Button {
         label: String,
         style: Style,
-        on_click: Option<Box<dyn FnMut()>>,
-        // resolved by layout
+        on_click: Option<M>,
         resolved_x: f32,
         resolved_y: f32,
         resolved_w: f32,
@@ -340,15 +337,13 @@ pub enum Element {
     },
     Row {
         style: Style,
-        children: Vec<Element>,
-        // resolved by layout
+        children: Vec<Element<M>>,
         resolved_w: f32,
         resolved_h: f32,
     },
     Column {
         style: Style,
-        children: Vec<Element>,
-        // resolved by layout
+        children: Vec<Element<M>>,
         resolved_w: f32,
         resolved_h: f32,
     },
@@ -356,7 +351,7 @@ pub enum Element {
 
 // builder impl
 
-impl Element {
+impl<M: Clone + 'static> Element<M> {
     fn style_mut(&mut self) -> Option<&mut Style> {
         match self {
             Element::Rect { style, .. } => Some(style),
@@ -366,6 +361,17 @@ impl Element {
             Element::Button { style, .. } => Some(style),
             Element::Empty => None,
         }
+    }
+
+    // on_click — takes an action value, not a closure
+    pub fn on_click(mut self, msg: M) -> Self {
+        if let Element::Button {
+            ref mut on_click, ..
+        } = self
+        {
+            *on_click = Some(msg);
+        }
+        self
     }
 
     // sizing
@@ -581,24 +587,13 @@ impl Element {
         }
         self
     }
-
-    // on_click
-    pub fn on_click(mut self, f: impl FnMut() + 'static) -> Self {
-        if let Element::Button {
-            ref mut on_click, ..
-        } = self
-        {
-            *on_click = Some(Box::new(f));
-        }
-        self
-    }
 }
 
-pub fn empty() -> Element {
+pub fn empty<M: Clone + 'static>() -> Element<M> {
     Element::Empty
 }
 
-pub fn rect(color: Color) -> Element {
+pub fn rect<M: Clone + 'static>(color: Color) -> Element<M> {
     Element::Rect {
         color,
         style: Style::default(),
@@ -607,7 +602,7 @@ pub fn rect(color: Color) -> Element {
     }
 }
 
-pub fn text(content: &str, color: Color) -> Element {
+pub fn text<M: Clone + 'static>(content: &str, color: Color) -> Element<M> {
     Element::Text {
         content: content.to_string(),
         color,
@@ -620,7 +615,7 @@ pub fn text(content: &str, color: Color) -> Element {
     }
 }
 
-pub fn button(label: &str) -> Element {
+pub fn button<M: Clone + 'static>(label: &str) -> Element<M> {
     Element::Button {
         label: label.to_string(),
         style: Style::default(),
@@ -632,7 +627,7 @@ pub fn button(label: &str) -> Element {
     }
 }
 
-pub fn row(children: Vec<Element>) -> Element {
+pub fn row<M: Clone + 'static>(children: Vec<Element<M>>) -> Element<M> {
     Element::Row {
         style: Style::default(),
         children,
@@ -641,7 +636,7 @@ pub fn row(children: Vec<Element>) -> Element {
     }
 }
 
-pub fn column(children: Vec<Element>) -> Element {
+pub fn column<M: Clone + 'static>(children: Vec<Element<M>>) -> Element<M> {
     Element::Column {
         style: Style::default(),
         children,
