@@ -216,6 +216,7 @@ fn apply_layout<M: Clone + 'static>(
             children,
             resolved_w,
             resolved_h,
+            ..
         } => {
             style.x = x;
             style.y = y;
@@ -231,6 +232,7 @@ fn apply_layout<M: Clone + 'static>(
             children,
             resolved_w,
             resolved_h,
+            ..
         } => {
             style.x = x;
             style.y = y;

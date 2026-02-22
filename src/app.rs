@@ -124,6 +124,7 @@ struct Runner<A: App> {
     mouse_y: f32,
     mouse_left_pressed: bool,
     mouse_left_just_pressed: bool,
+    mouse_left_just_released: bool,
     mouse_right_pressed: bool,
     mouse_right_just_pressed: bool,
     mouse_middle_pressed: bool,
@@ -168,6 +169,7 @@ impl<A: App> Runner<A> {
             mouse_y: 0.0,
             mouse_left_pressed: false,
             mouse_left_just_pressed: false,
+            mouse_left_just_released: false,
             mouse_right_pressed: false,
             mouse_right_just_pressed: false,
             mouse_middle_pressed: false,
@@ -284,6 +286,7 @@ impl<A: App> Runner<A> {
             self.mouse_x,
             self.mouse_y,
             self.mouse_left_just_pressed,
+            self.mouse_left_just_released,
         );
 
         {
@@ -335,15 +338,21 @@ impl<A: App> Runner<A> {
         finisher.present(encoder, &self.gpu().queue);
 
         // dispatch button/widget actions collected during draw
+        let had_actions = !actions.is_empty();
         for action in actions {
             let tasks = self.app.update(action);
             self.spawn_tasks(tasks);
+        }
+        // if anything changed, render the new state immediately
+        if had_actions {
+            self.window().request_redraw();
         }
 
         // update focused input id by scanning state
         self.focused_input_id = ti::find_focused(&self.state);
 
         self.mouse_left_just_pressed = false;
+        self.mouse_left_just_released = false;
         self.mouse_right_just_pressed = false;
         self.mouse_middle_just_pressed = false;
     }
@@ -437,6 +446,7 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                     match btn {
                         MouseButton::Left => {
                             self.mouse_left_just_pressed = pressed && !self.mouse_left_pressed;
+                            self.mouse_left_just_released = !pressed && self.mouse_left_pressed;
                             self.mouse_left_pressed = pressed;
                         }
                         MouseButton::Right => {

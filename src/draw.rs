@@ -1,7 +1,8 @@
 use crate::state::StateStore;
 use crate::widgets::text_input as ti;
 use crate::{
-    Color, Element, Fonts, Overflow, ShadowRenderer, ShapeRenderer, TextAlign, TextRenderer,
+    Color, Element, Fonts, Interactions, Overflow, ShadowRenderer, ShapeRenderer, TextAlign,
+    TextRenderer,
 };
 
 pub fn draw<M: Clone + 'static>(
@@ -14,6 +15,7 @@ pub fn draw<M: Clone + 'static>(
     mouse_x: f32,
     mouse_y: f32,
     left_just_pressed: bool,
+    left_just_released: bool,
 ) -> Vec<M> {
     let mut actions = Vec::new();
     draw_clipped(
@@ -26,10 +28,45 @@ pub fn draw<M: Clone + 'static>(
         mouse_x,
         mouse_y,
         left_just_pressed,
+        left_just_released,
         None,
         &mut actions,
     );
     actions
+}
+
+// check interactions for any element and push actions
+// uses a state key derived from position to track previous hover state
+fn check_interactions<M: Clone + 'static>(
+    interactions: &Interactions<M>,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    mouse_x: f32,
+    mouse_y: f32,
+    left_just_pressed: bool,
+    left_just_released: bool,
+    state: &mut StateStore,
+    actions: &mut Vec<M>,
+) {
+    let hovered = mouse_x >= x && mouse_x <= x + w && mouse_y >= y && mouse_y <= y + h;
+
+    if hovered {
+        if let Some(a) = &interactions.on_hover {
+            actions.push(a.clone());
+        }
+        if left_just_pressed {
+            if let Some(a) = &interactions.on_mouse_down {
+                actions.push(a.clone());
+            }
+        }
+        if left_just_released {
+            if let Some(a) = &interactions.on_click {
+                actions.push(a.clone());
+            }
+        }
+    }
 }
 
 fn draw_clipped<M: Clone + 'static>(
@@ -42,6 +79,7 @@ fn draw_clipped<M: Clone + 'static>(
     mouse_x: f32,
     mouse_y: f32,
     left_just_pressed: bool,
+    left_just_released: bool,
     clip: Option<[f32; 4]>,
     actions: &mut Vec<M>,
 ) {
@@ -51,6 +89,7 @@ fn draw_clipped<M: Clone + 'static>(
         Element::Rect {
             color,
             style,
+            interactions,
             resolved_w,
             resolved_h,
         } => {
@@ -71,6 +110,19 @@ fn draw_clipped<M: Clone + 'static>(
                 style.border_thickness,
                 clip,
             );
+            check_interactions(
+                interactions,
+                style.x,
+                style.y,
+                *resolved_w,
+                *resolved_h,
+                mouse_x,
+                mouse_y,
+                left_just_pressed,
+                left_just_released,
+                state,
+                actions,
+            );
         }
 
         Element::Text {
@@ -82,6 +134,7 @@ fn draw_clipped<M: Clone + 'static>(
             italic,
             text_align,
             style,
+            interactions,
         } => {
             if is_outside(style.x, style.y, 1.0, 1.0, clip) {
                 return;
@@ -112,12 +165,14 @@ fn draw_clipped<M: Clone + 'static>(
                 clip,
                 *color,
             );
+            // text doesn't have a resolved size stored — skip interactions for now
+            let _ = interactions;
         }
 
         Element::Button {
             label,
             style,
-            on_click,
+            interactions,
             resolved_x,
             resolved_y,
             resolved_w,
@@ -131,9 +186,9 @@ fn draw_clipped<M: Clone + 'static>(
                 && mouse_x <= *resolved_x + *resolved_w
                 && mouse_y >= *resolved_y
                 && mouse_y <= *resolved_y + *resolved_h;
-            let clicked = hovered && left_just_pressed;
+            let pressed = hovered && left_just_pressed;
 
-            let bg = if clicked {
+            let bg = if pressed {
                 style
                     .background
                     .map(|c| {
@@ -206,11 +261,19 @@ fn draw_clipped<M: Clone + 'static>(
                 Color::new(0.92, 0.92, 0.95, 1.0),
             );
 
-            if clicked {
-                if let Some(action) = on_click {
-                    actions.push(action.clone());
-                }
-            }
+            check_interactions(
+                interactions,
+                *resolved_x,
+                *resolved_y,
+                *resolved_w,
+                *resolved_h,
+                mouse_x,
+                mouse_y,
+                left_just_pressed,
+                left_just_released,
+                state,
+                actions,
+            );
         }
 
         Element::TextInput {
@@ -222,6 +285,7 @@ fn draw_clipped<M: Clone + 'static>(
             font_size,
             value,
             style,
+            interactions,
             on_change,
             resolved_x,
             resolved_y,
@@ -233,7 +297,6 @@ fn draw_clipped<M: Clone + 'static>(
             }
 
             let value_str = value.as_deref().unwrap_or("");
-
             ti::cache_value(state, id, value_str);
             if let Some(cb) = on_change.take() {
                 ti::register_callback(state, id, cb);
@@ -248,15 +311,12 @@ fn draw_clipped<M: Clone + 'static>(
             if left_just_pressed {
                 state.get_or_default_mut::<ti::TextInputState>(id).focused = hovered;
             }
-
             {
                 let s = state.get_or_default_mut::<ti::TextInputState>(id);
                 s.cursor = s.cursor.min(value_str.len());
             }
-
             let focused = state.get_or_default::<ti::TextInputState>(id).focused;
 
-            // background
             let default_bg = if focused {
                 Color::new(0.18, 0.18, 0.22, 1.0)
             } else if hovered {
@@ -265,8 +325,6 @@ fn draw_clipped<M: Clone + 'static>(
                 Color::new(0.13, 0.13, 0.17, 1.0)
             };
             let bg = style.background.unwrap_or(default_bg);
-
-            // border
             let default_border = if focused {
                 Color::new(0.4, 0.5, 0.9, 1.0)
             } else {
@@ -283,7 +341,6 @@ fn draw_clipped<M: Clone + 'static>(
             } else {
                 4.0
             };
-
             sr.draw_rounded_rect(
                 x,
                 y,
@@ -295,15 +352,12 @@ fn draw_clipped<M: Clone + 'static>(
                 border_w,
             );
 
-            // font
             let font_id = font
                 .as_deref()
                 .and_then(|name| fonts.resolve(Some(name)))
                 .unwrap_or_else(|| fonts.default_id().unwrap());
             let family = fonts.get(font_id).family.clone();
             let size = font_size.unwrap_or(fonts.get(font_id).size);
-
-            // padding — use style padding if set, else default 8px horizontal, centered vertical
             let pad_l = if style.padding.left > 0.0 {
                 style.padding.left
             } else {
@@ -321,7 +375,6 @@ fn draw_clipped<M: Clone + 'static>(
                 y + (h - th) / 2.0
             };
 
-            // text or placeholder
             if value_str.is_empty() {
                 let col = placeholder_color.unwrap_or(Color::new(0.45, 0.45, 0.5, 1.0));
                 tr.draw(
@@ -356,7 +409,6 @@ fn draw_clipped<M: Clone + 'static>(
                 );
             }
 
-            // cursor
             if focused {
                 let cursor = state.get_or_default::<ti::TextInputState>(id).cursor;
                 let (cursor_x, _) = fonts.measure_sized(&value_str[..cursor], font_id, size);
@@ -371,10 +423,25 @@ fn draw_clipped<M: Clone + 'static>(
                     0.0,
                 );
             }
+
+            check_interactions(
+                interactions,
+                x,
+                y,
+                w,
+                h,
+                mouse_x,
+                mouse_y,
+                left_just_pressed,
+                left_just_released,
+                state,
+                actions,
+            );
         }
 
         Element::Row {
             style,
+            interactions,
             children,
             resolved_w,
             resolved_h,
@@ -395,6 +462,19 @@ fn draw_clipped<M: Clone + 'static>(
                     clip,
                 );
             }
+            check_interactions(
+                interactions,
+                style.x,
+                style.y,
+                *resolved_w,
+                *resolved_h,
+                mouse_x,
+                mouse_y,
+                left_just_pressed,
+                left_just_released,
+                state,
+                actions,
+            );
             let child_clip = make_child_clip(
                 style.x,
                 style.y,
@@ -414,6 +494,7 @@ fn draw_clipped<M: Clone + 'static>(
                     mouse_x,
                     mouse_y,
                     left_just_pressed,
+                    left_just_released,
                     child_clip,
                     actions,
                 );
@@ -422,6 +503,7 @@ fn draw_clipped<M: Clone + 'static>(
 
         Element::Column {
             style,
+            interactions,
             children,
             resolved_w,
             resolved_h,
@@ -442,6 +524,19 @@ fn draw_clipped<M: Clone + 'static>(
                     clip,
                 );
             }
+            check_interactions(
+                interactions,
+                style.x,
+                style.y,
+                *resolved_w,
+                *resolved_h,
+                mouse_x,
+                mouse_y,
+                left_just_pressed,
+                left_just_released,
+                state,
+                actions,
+            );
             let child_clip = make_child_clip(
                 style.x,
                 style.y,
@@ -461,6 +556,7 @@ fn draw_clipped<M: Clone + 'static>(
                     mouse_x,
                     mouse_y,
                     left_just_pressed,
+                    left_just_released,
                     child_clip,
                     actions,
                 );

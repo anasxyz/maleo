@@ -4,12 +4,26 @@ use bento::*;
 
 #[derive(Clone)]
 enum Action {
-    NameChanged(String),
-    Clear,
+    // text input
+    SearchChanged(String),
+
+    // buttons
+    AddItem,
+    RemoveItem(usize),
+
+    // hover tracking
+    HoverButton(usize),
+    UnhoverButton,
+
+    // tab switching
+    SelectTab(usize),
 }
 
 struct MyApp {
-    name: String,
+    search: String,
+    items: Vec<String>,
+    hovered_item: Option<usize>,
+    active_tab: usize,
 }
 
 impl App for MyApp {
@@ -17,47 +31,187 @@ impl App for MyApp {
 
     fn new() -> Self {
         Self {
-            name: String::new(),
+            search: String::new(),
+            items: vec![
+                "Buy groceries".to_string(),
+                "Walk the dog".to_string(),
+                "Read a book".to_string(),
+            ],
+            hovered_item: None,
+            active_tab: 0,
         }
     }
 
     fn view(&self) -> Element<Action> {
-        let greeting = if self.name.is_empty() {
-            "Type your name above".to_string()
-        } else {
-            format!("Hello, {}!", self.name)
-        };
+        let tabs = ["Tasks", "About"];
 
-        row(vec![
-            text_input("name")
-                .placeholder("Enter your name...")
-                .value(&self.name)
-                .on_change(|val| Action::NameChanged(val))
-                .width(Val::Px(300.0))
-                .background(Color::hex("#0a0a15"))
-                .border(Color::hex("#8080cc"), 1.0)
-                .border_radius(8.0)
-                .padding(Edges::all(12.0))
-                .text_color(Color::WHITE)
-                .placeholder_color(Color::hex("#ffffff4d"))
-                .font("mono")
-                .font_size(16.0)
-                .opacity(0.9),
+        column(vec![
+            // top bar
+            row(vec![
+                text("Bento Demo", Color::WHITE).font_size(20.0),
+                row(tabs
+                    .iter()
+                    .enumerate()
+                    .map(|(i, label)| {
+                        let active = self.active_tab == i;
+                        button(label)
+                            .background(if active {
+                                Color::hex("#5566ee")
+                            } else {
+                                Color::hex("#2a2a35")
+                            })
+                            .border_radius(6.0)
+                            .on_click(Action::SelectTab(i))
+                    })
+                    .collect::<Vec<_>>())
+                .gap(8.0)
+                .align_self(Align::Center),
+            ])
+            .width(Val::Percent(100.0))
+            .align_y(Align::Center)
+            .padding(Edges::all(20.0))
+            .background(Color::hex("#1a1a24"))
+            .gap(16.0),
+            // content
+            if self.active_tab == 0 {
+                self.tasks_tab()
+            } else {
+                self.about_tab()
+            },
         ])
-        .gap(16.0)
         .width(Val::Percent(100.0))
         .height(Val::Percent(100.0))
     }
 
     fn update(&mut self, action: Action) -> Vec<Task<Action>> {
         match action {
-            Action::NameChanged(val) => self.name = val,
-            Action::Clear => self.name = String::new(),
+            Action::SearchChanged(val) => self.search = val,
+            Action::AddItem => {
+                if !self.search.is_empty() {
+                    self.items.push(self.search.clone());
+                    self.search = String::new();
+                }
+            }
+            Action::RemoveItem(i) => {
+                self.items.remove(i);
+            }
+            Action::HoverButton(i) => self.hovered_item = Some(i),
+            Action::UnhoverButton => self.hovered_item = None,
+            Action::SelectTab(i) => self.active_tab = i,
         }
         vec![]
     }
 }
 
+impl MyApp {
+    fn tasks_tab(&self) -> Element<Action> {
+        let filtered: Vec<(usize, &String)> = self
+            .items
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| {
+                self.search.is_empty() || item.to_lowercase().contains(&self.search.to_lowercase())
+            })
+            .collect();
+
+        column(vec![
+            // search + add row
+            row(vec![
+                text_input("search")
+                    .placeholder("New task or search...")
+                    .value(&self.search)
+                    .on_change(|v| Action::SearchChanged(v))
+                    .grow(1.0),
+                button("Add")
+                    .background(Color::hex("#44bb77"))
+                    .border_radius(6.0)
+                    .on_click(Action::AddItem)
+                    .height(Val::Percent(100.0))
+            ])
+            .gap(8.0)
+            .width(Val::Percent(100.0)),
+            // item count
+            text(
+                &format!(
+                    "{} task{}",
+                    filtered.len(),
+                    if filtered.len() == 1 { "" } else { "s" }
+                ),
+                Color::hex("#888899"),
+            ),
+            // list
+            column(if filtered.is_empty() {
+                vec![text("No tasks found", Color::hex("#555566")).align_self(Align::Center)]
+            } else {
+                filtered
+                    .iter()
+                    .map(|(i, item)| {
+                        let hovered = self.hovered_item == Some(*i);
+                        row(vec![
+                            text(item, Color::WHITE).grow(1.0),
+                            button("✕")
+                                .background(Color::hex("#cc4444"))
+                                .border_radius(4.0)
+                                .on_click(Action::RemoveItem(*i)),
+                        ])
+                        .padding(Edges::all(10.0))
+                        .gap(8.0)
+                        .width(Val::Percent(100.0))
+                        .background(if hovered {
+                            Color::hex("#2a2a3e")
+                        } else {
+                            Color::hex("#1e1e2a")
+                        })
+                        .border_radius(6.0)
+                        .on_hover(Action::HoverButton(*i))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .gap(6.0)
+            .width(Val::Percent(100.0)),
+        ])
+        .gap(12.0)
+        .padding(Edges::all(20.0))
+        .width(Val::Percent(100.0))
+        .grow(1.0)
+    }
+
+    fn about_tab(&self) -> Element<Action> {
+        column(vec![
+            text("Bento UI", Color::WHITE).font_size(28.0),
+            text(
+                "A Rust UI framework built on wgpu + taffy.",
+                Color::hex("#aaaacc"),
+            ),
+            text("Features so far:", Color::hex("#888899")),
+            column(vec![
+                text("• Flexbox layout via Taffy", Color::hex("#ccccdd")),
+                text("• Text rendering via Glyphon", Color::hex("#ccccdd")),
+                text(
+                    "• Shapes + shadows + rounded corners",
+                    Color::hex("#ccccdd"),
+                ),
+                text("• Controlled text input", Color::hex("#ccccdd")),
+                text(
+                    "• on_click, on_hover, on_mouse_down on any element",
+                    Color::hex("#ccccdd"),
+                ),
+            ])
+            .gap(4.0),
+        ])
+        .gap(16.0)
+        .padding(Edges::all(32.0))
+        .align_x(Align::Center)
+        .width(Val::Percent(100.0))
+        .grow(1.0)
+    }
+}
+
 fn main() {
-    MyApp::run(Settings::default().title("Text Input Test"));
+    MyApp::run(
+        Settings::default()
+            .title("Bento Demo")
+            .width(640)
+            .height(500),
+    );
 }

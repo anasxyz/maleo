@@ -226,12 +226,27 @@ pub enum Overflow {
     Scroll,
 }
 
+pub struct Interactions<M> {
+    pub on_click: Option<M>,
+    pub on_hover: Option<M>, // fires every frame while hovered
+    pub on_mouse_down: Option<M>,
+}
+
+impl<M> Default for Interactions<M> {
+    fn default() -> Self {
+        Self {
+            on_click: None,
+            on_hover: None,
+            on_mouse_down: None,
+        }
+    }
+}
+
 // style
 
 #[derive(Clone)]
 pub struct Style {
-    // resolved position
-    // this is set by layout, not by user
+    // resolved position — set by layout, not user
     pub x: f32,
     pub y: f32,
 
@@ -254,8 +269,7 @@ pub struct Style {
     pub align_x: Align,
     pub align_y: Align,
 
-    // alignment (
-    // this is on self, overrides parentss align_items
+    // alignment (on self, overrides parent align_items)
     pub align_self: Option<Align>,
 
     // spacing
@@ -278,6 +292,8 @@ pub struct Style {
     pub shadow_offset_x: f32,
     pub shadow_offset_y: f32,
     pub shadow_blur: f32,
+    pub font: Option<String>,
+    pub font_size: Option<f32>,
 }
 
 impl Default for Style {
@@ -299,7 +315,7 @@ impl Default for Style {
             align_x: Align::Start,
             align_y: Align::Start,
             align_self: None,
-            padding: Edges::default(),
+            padding: Padding::default(),
             margin: Margin::default(),
             gap: 0.0,
             position: Position::Relative,
@@ -314,6 +330,8 @@ impl Default for Style {
             shadow_offset_x: 0.0,
             shadow_offset_y: 0.0,
             shadow_blur: 0.0,
+            font: None,
+            font_size: None,
         }
     }
 }
@@ -325,6 +343,7 @@ pub enum Element<M: Clone + 'static = ()> {
     Rect {
         color: Color,
         style: Style,
+        interactions: Interactions<M>,
         resolved_w: f32,
         resolved_h: f32,
     },
@@ -337,11 +356,12 @@ pub enum Element<M: Clone + 'static = ()> {
         italic: bool,
         text_align: TextAlign,
         style: Style,
+        interactions: Interactions<M>,
     },
     Button {
         label: String,
         style: Style,
-        on_click: Option<M>,
+        interactions: Interactions<M>,
         resolved_x: f32,
         resolved_y: f32,
         resolved_w: f32,
@@ -356,6 +376,7 @@ pub enum Element<M: Clone + 'static = ()> {
         font_size: Option<f32>,
         value: Option<String>,
         style: Style,
+        interactions: Interactions<M>,
         on_change: Option<Box<dyn Fn(String) -> M>>,
         resolved_x: f32,
         resolved_y: f32,
@@ -364,12 +385,14 @@ pub enum Element<M: Clone + 'static = ()> {
     },
     Row {
         style: Style,
+        interactions: Interactions<M>,
         children: Vec<Element<M>>,
         resolved_w: f32,
         resolved_h: f32,
     },
     Column {
         style: Style,
+        interactions: Interactions<M>,
         children: Vec<Element<M>>,
         resolved_w: f32,
         resolved_h: f32,
@@ -391,18 +414,39 @@ impl<M: Clone + 'static> Element<M> {
         }
     }
 
-    // on_click — takes an action value, not a closure
+    fn interactions_mut(&mut self) -> Option<&mut Interactions<M>> {
+        match self {
+            Element::Rect { interactions, .. } => Some(interactions),
+            Element::Text { interactions, .. } => Some(interactions),
+            Element::Row { interactions, .. } => Some(interactions),
+            Element::Column { interactions, .. } => Some(interactions),
+            Element::Button { interactions, .. } => Some(interactions),
+            Element::TextInput { interactions, .. } => Some(interactions),
+            Element::Empty => None,
+        }
+    }
+
+    // interactions — work on every element
     pub fn on_click(mut self, msg: M) -> Self {
-        if let Element::Button {
-            ref mut on_click, ..
-        } = self
-        {
-            *on_click = Some(msg);
+        if let Some(i) = self.interactions_mut() {
+            i.on_click = Some(msg);
+        }
+        self
+    }
+    pub fn on_hover(mut self, msg: M) -> Self {
+        if let Some(i) = self.interactions_mut() {
+            i.on_hover = Some(msg);
+        }
+        self
+    }
+    pub fn on_mouse_down(mut self, msg: M) -> Self {
+        if let Some(i) = self.interactions_mut() {
+            i.on_mouse_down = Some(msg);
         }
         self
     }
 
-    // on_change — called when text input value changes, receives new string
+    // text input specific
     pub fn on_change(mut self, f: impl Fn(String) -> M + 'static) -> Self {
         if let Element::TextInput {
             ref mut on_change, ..
@@ -412,15 +456,22 @@ impl<M: Clone + 'static> Element<M> {
         }
         self
     }
-
-    // value — controlled value, synced to internal state each frame
     pub fn value(mut self, v: &str) -> Self {
         if let Element::TextInput { ref mut value, .. } = self {
             *value = Some(v.to_string());
         }
         self
     }
-
+    pub fn placeholder(mut self, text: &str) -> Self {
+        if let Element::TextInput {
+            ref mut placeholder,
+            ..
+        } = self
+        {
+            *placeholder = text.to_string();
+        }
+        self
+    }
     pub fn placeholder_color(mut self, color: Color) -> Self {
         if let Element::TextInput {
             ref mut placeholder_color,
@@ -431,7 +482,6 @@ impl<M: Clone + 'static> Element<M> {
         }
         self
     }
-
     pub fn text_color(mut self, color: Color) -> Self {
         if let Element::TextInput {
             ref mut text_color, ..
@@ -614,13 +664,13 @@ impl<M: Clone + 'static> Element<M> {
         self
     }
 
-    // font (text and text_input)
+    // font — works on Text and TextInput
     pub fn font(mut self, name: &str) -> Self {
-        match self {
-            Element::Text { ref mut font, .. } => {
+        match &mut self {
+            Element::Text { font, .. } => {
                 *font = Some(name.to_string());
             }
-            Element::TextInput { ref mut font, .. } => {
+            Element::TextInput { font, .. } => {
                 *font = Some(name.to_string());
             }
             _ => {}
@@ -628,15 +678,11 @@ impl<M: Clone + 'static> Element<M> {
         self
     }
     pub fn font_size(mut self, size: f32) -> Self {
-        match self {
-            Element::Text {
-                ref mut font_size, ..
-            } => {
+        match &mut self {
+            Element::Text { font_size, .. } => {
                 *font_size = Some(size);
             }
-            Element::TextInput {
-                ref mut font_size, ..
-            } => {
+            Element::TextInput { font_size, .. } => {
                 *font_size = Some(size);
             }
             _ => {}
@@ -668,18 +714,6 @@ impl<M: Clone + 'static> Element<M> {
         }
         self
     }
-
-    // placeholder (text_input only)
-    pub fn placeholder(mut self, text: &str) -> Self {
-        if let Element::TextInput {
-            ref mut placeholder,
-            ..
-        } = self
-        {
-            *placeholder = text.to_string();
-        }
-        self
-    }
 }
 
 pub fn empty<M: Clone + 'static>() -> Element<M> {
@@ -690,6 +724,7 @@ pub fn rect<M: Clone + 'static>(color: Color) -> Element<M> {
     Element::Rect {
         color,
         style: Style::default(),
+        interactions: Interactions::default(),
         resolved_w: 0.0,
         resolved_h: 0.0,
     }
@@ -705,6 +740,7 @@ pub fn text<M: Clone + 'static>(content: &str, color: Color) -> Element<M> {
         italic: false,
         text_align: TextAlign::Left,
         style: Style::default(),
+        interactions: Interactions::default(),
     }
 }
 
@@ -712,7 +748,7 @@ pub fn button<M: Clone + 'static>(label: &str) -> Element<M> {
     Element::Button {
         label: label.to_string(),
         style: Style::default(),
-        on_click: None,
+        interactions: Interactions::default(),
         resolved_x: 0.0,
         resolved_y: 0.0,
         resolved_w: 0.0,
@@ -730,6 +766,7 @@ pub fn text_input<M: Clone + 'static>(id: &str) -> Element<M> {
         font_size: None,
         value: None,
         style: Style::default(),
+        interactions: Interactions::default(),
         on_change: None,
         resolved_x: 0.0,
         resolved_y: 0.0,
@@ -741,6 +778,7 @@ pub fn text_input<M: Clone + 'static>(id: &str) -> Element<M> {
 pub fn row<M: Clone + 'static>(children: Vec<Element<M>>) -> Element<M> {
     Element::Row {
         style: Style::default(),
+        interactions: Interactions::default(),
         children,
         resolved_w: 0.0,
         resolved_h: 0.0,
@@ -750,6 +788,7 @@ pub fn row<M: Clone + 'static>(children: Vec<Element<M>>) -> Element<M> {
 pub fn column<M: Clone + 'static>(children: Vec<Element<M>>) -> Element<M> {
     Element::Column {
         style: Style::default(),
+        interactions: Interactions::default(),
         children,
         resolved_w: 0.0,
         resolved_h: 0.0,
