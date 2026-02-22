@@ -222,6 +222,8 @@ pub enum Element {
         color: Color,
         font: Font,
         font_size: Option<f32>,
+        font_weight: u16,
+        italic: bool,
         style: Style,
     },
     Button {
@@ -452,6 +454,22 @@ impl Element {
         }
         self
     }
+    pub fn font_weight(mut self, weight: u16) -> Self {
+        if let Element::Text {
+            ref mut font_weight,
+            ..
+        } = self
+        {
+            *font_weight = weight;
+        }
+        self
+    }
+    pub fn italic(mut self) -> Self {
+        if let Element::Text { ref mut italic, .. } = self {
+            *italic = true;
+        }
+        self
+    }
 
     // on_click
     pub fn on_click(mut self, f: impl FnMut() + 'static) -> Self {
@@ -484,6 +502,8 @@ pub fn text(content: &str, color: Color) -> Element {
         color,
         font: Font::Default,
         font_size: None,
+        font_weight: 400,
+        italic: false,
         style: Style::default(),
     }
 }

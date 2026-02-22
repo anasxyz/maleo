@@ -1,7 +1,8 @@
 use crate::Color;
 use glyphon::{
     Attrs, Buffer, Cache, Color as GlyphonColor, Family, FontSystem, Metrics, Resolution, Shaping,
-    SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer as GlyphonRenderer, Viewport,
+    Style as GlyphonStyle, SwashCache, TextArea, TextAtlas, TextBounds,
+    TextRenderer as GlyphonRenderer, Viewport, Weight,
 };
 use wgpu;
 
@@ -13,6 +14,8 @@ struct TextEntry {
     text: String,
     family: String,
     size: f32,
+    weight: u16,
+    italic: bool,
     color: GlyphonColor,
 }
 
@@ -71,6 +74,8 @@ impl TextRenderer {
         font_system: &mut FontSystem,
         family: String,
         size: f32,
+        weight: u16,
+        italic: bool,
         text: &str,
         x: f32,
         y: f32,
@@ -87,6 +92,15 @@ impl TextRenderer {
         let idx = self.active;
         self.active += 1;
 
+        let attrs = Attrs::new()
+            .family(Family::Name(family.as_str()))
+            .weight(Weight(weight))
+            .style(if italic {
+                GlyphonStyle::Italic
+            } else {
+                GlyphonStyle::Normal
+            });
+
         if idx < self.entries.len() {
             let entry = &mut self.entries[idx];
             entry.x = x;
@@ -94,12 +108,17 @@ impl TextRenderer {
             entry.scale = scale;
             entry.color = glyphon_color;
 
-            let content_changed =
-                entry.text != text || entry.family != family || entry.size != size;
+            let content_changed = entry.text != text
+                || entry.family != family
+                || entry.size != size
+                || entry.weight != weight
+                || entry.italic != italic;
             if content_changed {
                 entry.text = text.to_string();
                 entry.family = family.clone();
                 entry.size = size;
+                entry.weight = weight;
+                entry.italic = italic;
                 entry
                     .buffer
                     .set_metrics(font_system, Metrics::new(size, line_height));
@@ -108,12 +127,9 @@ impl TextRenderer {
                     Some(self.screen_width - x),
                     Some(self.screen_height - y),
                 );
-                entry.buffer.set_text(
-                    font_system,
-                    text,
-                    &Attrs::new().family(Family::Name(family.as_str())),
-                    Shaping::Advanced,
-                );
+                entry
+                    .buffer
+                    .set_text(font_system, text, &attrs, Shaping::Advanced);
                 entry.buffer.shape_until_scroll(font_system, false);
             }
         } else {
@@ -123,12 +139,7 @@ impl TextRenderer {
                 Some(self.screen_width - x),
                 Some(self.screen_height - y),
             );
-            buffer.set_text(
-                font_system,
-                text,
-                &Attrs::new().family(Family::Name(family.as_str())),
-                Shaping::Advanced,
-            );
+            buffer.set_text(font_system, text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(font_system, false);
             self.entries.push(TextEntry {
                 buffer,
@@ -138,6 +149,8 @@ impl TextRenderer {
                 text: text.to_string(),
                 family,
                 size,
+                weight,
+                italic,
                 color: glyphon_color,
             });
         }

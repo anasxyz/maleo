@@ -63,6 +63,8 @@ fn draw_clipped(
             color,
             font,
             font_size,
+            font_weight,
+            italic,
             style,
         } => {
             if is_outside(style.x, style.y, 1.0, 1.0, clip) {
@@ -80,6 +82,8 @@ fn draw_clipped(
                 &mut fonts.font_system,
                 family,
                 size,
+                *font_weight,
+                *italic,
                 content,
                 style.x,
                 style.y,
@@ -164,6 +168,8 @@ fn draw_clipped(
                 &mut fonts.font_system,
                 family,
                 size,
+                400,
+                false,
                 label,
                 tx,
                 ty,
