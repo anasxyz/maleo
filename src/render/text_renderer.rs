@@ -13,6 +13,7 @@ struct TextEntry {
     y: f32,
     width: f32,
     scale: f32,
+    clip: Option<[f32; 4]>,
     text: String,
     family: String,
     size: f32,
@@ -84,6 +85,7 @@ impl TextRenderer {
         x: f32,
         y: f32,
         width: f32,
+        clip: Option<[f32; 4]>,
         color: Color,
     ) {
         let glyphon_color = GlyphonColor::rgb(
@@ -124,6 +126,7 @@ impl TextRenderer {
             entry.y = y;
             entry.scale = scale;
             entry.color = glyphon_color;
+            entry.clip = clip;
 
             let content_changed = entry.text != text
                 || entry.family != family
@@ -177,6 +180,7 @@ impl TextRenderer {
                 x,
                 y,
                 width,
+                clip,
                 scale,
                 text: text.to_string(),
                 family,
@@ -216,19 +220,32 @@ impl TextRenderer {
 
         let text_areas: Vec<TextArea> = self.entries[..self.active]
             .iter()
-            .map(|entry| TextArea {
-                buffer: &entry.buffer,
-                left: entry.x * entry.scale,
-                top: entry.y * entry.scale,
-                scale: entry.scale,
-                bounds: TextBounds {
-                    left: 0,
-                    top: 0,
-                    right: physical_width as i32,
-                    bottom: physical_height as i32,
-                },
-                default_color: entry.color,
-                custom_glyphs: &[],
+            .map(|entry| {
+                let scale = entry.scale;
+                let bounds = if let Some([cx, cy, cx2, cy2]) = entry.clip {
+                    TextBounds {
+                        left: (cx * scale) as i32,
+                        top: (cy * scale) as i32,
+                        right: (cx2 * scale) as i32,
+                        bottom: (cy2 * scale) as i32,
+                    }
+                } else {
+                    TextBounds {
+                        left: 0,
+                        top: 0,
+                        right: physical_width as i32,
+                        bottom: physical_height as i32,
+                    }
+                };
+                TextArea {
+                    buffer: &entry.buffer,
+                    left: entry.x * scale,
+                    top: entry.y * scale,
+                    scale,
+                    bounds,
+                    default_color: entry.color,
+                    custom_glyphs: &[],
+                }
             })
             .collect();
 

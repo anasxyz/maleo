@@ -94,6 +94,7 @@ fn draw_clipped(
                 style.x,
                 style.y,
                 width,
+                clip,
                 *color,
             );
         }
@@ -185,6 +186,7 @@ fn draw_clipped(
                 tx,
                 ty,
                 *resolved_w,
+                clip,
                 Color::new(0.92, 0.92, 0.95, 1.0),
             );
 
