@@ -29,7 +29,7 @@ impl Default for Settings {
             title: "Bento UI".to_string(),
             width: 800,
             height: 600,
-            clear_color: Color::rgb(5, 5, 5),
+            clear_color: Color::new(0.1, 0.1, 0.12, 1.0),
         }
     }
 }
@@ -56,8 +56,10 @@ impl Settings {
 // app trait
 
 pub trait App: 'static + Sized {
+    type Message: Clone + 'static;
     fn new() -> Self;
-    fn update(&mut self, events: &Events) -> Element;
+    fn view(&self, events: &Events) -> Element<Self::Message>;
+    fn update(&mut self, message: Self::Message) {}
     fn fonts(&self, fonts: &mut Fonts) {}
     fn run(settings: Settings) {
         run::<Self>(settings);
@@ -153,9 +155,9 @@ impl<A: App> Runner<A> {
         let (mut encoder, finisher, view, msaa_view) = frame.begin();
         let (width, height) = self.logical_size();
 
-        let mut tree = self.app.update(&self.events);
+        let mut tree = self.app.view(&self.events);
         do_layout(&mut tree, width, height, self.fonts.as_mut().unwrap());
-        draw(
+        let messages = draw(
             &mut tree,
             self.shape_renderer.as_mut().unwrap(),
             self.shadow_renderer.as_mut().unwrap(),
@@ -211,6 +213,11 @@ impl<A: App> Runner<A> {
         self.text_renderer.as_mut().unwrap().clear();
         self.text_renderer.as_mut().unwrap().trim_atlas();
         finisher.present(encoder, &self.gpu().queue);
+
+        // dispatch collected messages to app
+        for msg in messages {
+            self.app.update(msg);
+        }
     }
 }
 

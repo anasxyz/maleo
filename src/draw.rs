@@ -2,14 +2,15 @@ use crate::{
     Color, Element, Events, Fonts, Overflow, ShadowRenderer, ShapeRenderer, TextAlign, TextRenderer,
 };
 
-pub fn draw(
-    element: &mut Element,
+pub fn draw<M: Clone + 'static>(
+    element: &mut Element<M>,
     shape_renderer: &mut ShapeRenderer,
     shadow_renderer: &mut ShadowRenderer,
     text_renderer: &mut TextRenderer,
     fonts: &mut Fonts,
     events: &Events,
-) {
+) -> Vec<M> {
+    let mut messages = Vec::new();
     draw_clipped(
         element,
         shape_renderer,
@@ -18,17 +19,20 @@ pub fn draw(
         fonts,
         events,
         None,
+        &mut messages,
     );
+    messages
 }
 
-fn draw_clipped(
-    element: &mut Element,
+fn draw_clipped<M: Clone + 'static>(
+    element: &mut Element<M>,
     sr: &mut ShapeRenderer,
     shadow: &mut ShadowRenderer,
     tr: &mut TextRenderer,
     fonts: &mut Fonts,
     events: &Events,
     clip: Option<[f32; 4]>,
+    messages: &mut Vec<M>,
 ) {
     match element {
         Element::Empty => {}
@@ -191,8 +195,8 @@ fn draw_clipped(
             );
 
             if clicked {
-                if let Some(cb) = on_click {
-                    cb();
+                if let Some(msg) = on_click {
+                    messages.push(msg.clone());
                 }
             }
         }
@@ -228,7 +232,7 @@ fn draw_clipped(
                 clip,
             );
             for child in children {
-                draw_clipped(child, sr, shadow, tr, fonts, events, child_clip);
+                draw_clipped(child, sr, shadow, tr, fonts, events, child_clip, messages);
             }
         }
 
@@ -263,7 +267,7 @@ fn draw_clipped(
                 clip,
             );
             for child in children {
-                draw_clipped(child, sr, shadow, tr, fonts, events, child_clip);
+                draw_clipped(child, sr, shadow, tr, fonts, events, child_clip, messages);
             }
         }
     }
