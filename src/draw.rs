@@ -1,4 +1,6 @@
-use crate::{Color, Element, Events, Fonts, Overflow, ShadowRenderer, ShapeRenderer, TextRenderer};
+use crate::{
+    Color, Element, Events, Fonts, Overflow, ShadowRenderer, ShapeRenderer, TextAlign, TextRenderer,
+};
 
 pub fn draw(
     element: &mut Element,
@@ -63,6 +65,7 @@ fn draw_clipped(
             font_size,
             font_weight,
             italic,
+            text_align,
             style,
         } => {
             if is_outside(style.x, style.y, 1.0, 1.0, clip) {
@@ -77,6 +80,7 @@ fn draw_clipped(
                 size,
                 *font_weight,
                 *italic,
+                *text_align,
                 content,
                 style.x,
                 style.y,
@@ -162,6 +166,7 @@ fn draw_clipped(
                 size,
                 400,
                 false,
+                TextAlign::Left,
                 label,
                 tx,
                 ty,

@@ -13,7 +13,15 @@ pub enum Align {
     SpaceEvenly,
 }
 
-// val
+// text align
+
+#[derive(Clone, Copy, PartialEq, Default)]
+pub enum TextAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
 
 #[derive(Clone, Default)]
 pub enum Val {
@@ -224,6 +232,7 @@ pub enum Element {
         font_size: Option<f32>,
         font_weight: u16,
         italic: bool,
+        text_align: TextAlign,
         style: Style,
     },
     Button {
@@ -470,6 +479,15 @@ impl Element {
         }
         self
     }
+    pub fn text_align(mut self, align: TextAlign) -> Self {
+        if let Element::Text {
+            ref mut text_align, ..
+        } = self
+        {
+            *text_align = align;
+        }
+        self
+    }
 
     // on_click
     pub fn on_click(mut self, f: impl FnMut() + 'static) -> Self {
@@ -504,6 +522,7 @@ pub fn text(content: &str, color: Color) -> Element {
         font_size: None,
         font_weight: 400,
         italic: false,
+        text_align: TextAlign::Left,
         style: Style::default(),
     }
 }

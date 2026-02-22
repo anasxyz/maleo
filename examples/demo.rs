@@ -18,13 +18,19 @@ impl App for MyApp {
             text("Bold Italic", Color::WHITE).font_weight(700).italic(),
             text("Big Bold", Color::WHITE).font_size(32.0).font_weight(700),
             text("Custom Font", Color::WHITE).font("heading"),
+            text("Left aligned\nSecond line is shorter\nThird", Color::WHITE)
+                .text_align(TextAlign::Left),
+            text("Center aligned\nSecond line is shorter\nThird", Color::WHITE)
+                .text_align(TextAlign::Center),
+            text("Right aligned\nSecond line is shorter\nThird", Color::WHITE)
+                .text_align(TextAlign::Right),
         ])
         .gap(8.0)
         .padding(Edges::all(24.0))
     }
 
     fn fonts(&self, fonts: &mut Fonts) {
-        fonts.add("heading", "JetBrainsMono Nerd Font Mono", 40.0);
+        fonts.add("heading", "Georgia", 20.0);
         fonts.add("body", "Arial", 14.0).default();
     }
 }
