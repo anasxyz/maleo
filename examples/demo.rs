@@ -11,21 +11,23 @@ impl App for MyApp {
 
     fn update(&mut self, events: &Events) -> Element {
         row(vec![
-            rect(Color::RED)
-                .width(Val::Percent(98.0))
-                .height(Val::Px(100.0))
-                .shrink(0.0),
-            rect(Color::GREEN)
-                .width(Val::Px(100.0))
-                .height(Val::Px(100.0))
-                .shrink(0.0),
-            rect(Color::BLUE)
-                .width(Val::Px(100.0))
-                .height(Val::Px(100.0))
-                .shrink(0.0),
+            rect(Color::rgb(0.2, 0.2, 0.3))
+                .width(Val::Px(120.0))
+                .height(Val::Px(120.0))
+                .border(Color::WHITE, 2.0),
+            rect(Color::rgb(0.2, 0.2, 0.3))
+                .width(Val::Px(120.0))
+                .height(Val::Px(120.0))
+                .border_radius(12.0)
+                .border(Color::rgb(0.5, 0.8, 1.0), 2.0),
+            rect(Color::rgb(0.2, 0.2, 0.3))
+                .width(Val::Px(120.0))
+                .height(Val::Px(120.0))
+                .border_radius(60.0)
+                .border(Color::rgb(1.0, 0.5, 0.2), 3.0),
         ])
-        .width(Val::Percent(100.0))
-        .overflow_hidden()
+        .gap(16.0)
+        .padding(Edges::all(16.0))
     }
 }
 
