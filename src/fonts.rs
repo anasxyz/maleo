@@ -1,4 +1,4 @@
-use glyphon::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping};
+use glyphon::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, fontdb};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -15,6 +15,7 @@ pub struct Fonts {
     measure_cache: HashMap<(usize, String, u32), (f32, f32)>,
     name_to_id: HashMap<String, FontId>,
     pub(crate) default: Option<FontId>,
+    fonts_loaded: bool,
 }
 
 // returned by add() so the user can chain .default()
@@ -32,16 +33,24 @@ impl<'a> FontBuilder<'a> {
 
 impl Fonts {
     pub fn new() -> Self {
+        let db = fontdb::Database::new();
+        let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
         Self {
-            font_system: FontSystem::new(),
+            font_system,
             entries: Vec::new(),
             measure_cache: HashMap::new(),
             name_to_id: HashMap::new(),
             default: None,
+            fonts_loaded: false,
         }
     }
 
     pub fn add(&mut self, name: &str, family: &str, size: f32) -> FontBuilder<'_> {
+        // load system fonts once on first add 
+        if !self.fonts_loaded {
+            self.fonts_loaded = true;
+            self.font_system.db_mut().load_system_fonts();
+        }
         let id = if let Some(&existing) = self.name_to_id.get(name) {
             existing
         } else {

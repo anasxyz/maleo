@@ -11,15 +11,14 @@ impl App for MyApp {
 
     fn update(&mut self, events: &Events) -> Element {
         row(vec![
-            text("12345678901234567890", Color::WHITE).font("code").margin(Margin::auto()),
-        ]).width(Val::Percent(100.0)).height(Val::Percent(100.0)).overflow_hidden()
+            rect(Color::RED).width(Val::Px(100.0)).height(Val::Px(100.0)),
+        ])
     }
 
     fn fonts(&self, fonts: &mut Fonts) {
-        fonts.add("code", "JetBrainsMono Nerd Font Mono", 20.0);
     }
 }
 
 fn main() {
-    MyApp::run(Settings::default().title("Bento UI"));
+    MyApp::run(Settings::default());
 }
