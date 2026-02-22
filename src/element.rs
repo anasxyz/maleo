@@ -103,13 +103,25 @@ impl Edges {
 // keep padding as an alias for backwards compat and ergonomics
 pub type Padding = Edges;
 
-// margin — each side can be a value or auto
-#[derive(Clone, Copy, Default)]
+// margin — each side can be a value or auto (auto = absorb remaining space, used for centering)
+#[derive(Clone, Copy)]
 pub struct Margin {
     pub top: Option<f32>,
     pub right: Option<f32>,
     pub bottom: Option<f32>,
     pub left: Option<f32>,
+}
+
+impl Default for Margin {
+    fn default() -> Self {
+        // all zero by default — None means auto which centers in flexbox
+        Self {
+            top: Some(0.0),
+            right: Some(0.0),
+            bottom: Some(0.0),
+            left: Some(0.0),
+        }
+    }
 }
 
 impl Margin {
@@ -338,6 +350,10 @@ pub enum Element<M: Clone + 'static = ()> {
     TextInput {
         id: String,
         placeholder: String,
+        placeholder_color: Option<Color>,
+        text_color: Option<Color>,
+        font: Option<String>,
+        font_size: Option<f32>,
         value: Option<String>,
         style: Style,
         on_change: Option<Box<dyn Fn(String) -> M>>,
@@ -401,6 +417,27 @@ impl<M: Clone + 'static> Element<M> {
     pub fn value(mut self, v: &str) -> Self {
         if let Element::TextInput { ref mut value, .. } = self {
             *value = Some(v.to_string());
+        }
+        self
+    }
+
+    pub fn placeholder_color(mut self, color: Color) -> Self {
+        if let Element::TextInput {
+            ref mut placeholder_color,
+            ..
+        } = self
+        {
+            *placeholder_color = Some(color);
+        }
+        self
+    }
+
+    pub fn text_color(mut self, color: Color) -> Self {
+        if let Element::TextInput {
+            ref mut text_color, ..
+        } = self
+        {
+            *text_color = Some(color);
         }
         self
     }
@@ -577,19 +614,32 @@ impl<M: Clone + 'static> Element<M> {
         self
     }
 
-    // font (text only)
+    // font (text and text_input)
     pub fn font(mut self, name: &str) -> Self {
-        if let Element::Text { ref mut font, .. } = self {
-            *font = Some(name.to_string());
+        match self {
+            Element::Text { ref mut font, .. } => {
+                *font = Some(name.to_string());
+            }
+            Element::TextInput { ref mut font, .. } => {
+                *font = Some(name.to_string());
+            }
+            _ => {}
         }
         self
     }
     pub fn font_size(mut self, size: f32) -> Self {
-        if let Element::Text {
-            ref mut font_size, ..
-        } = self
-        {
-            *font_size = Some(size);
+        match self {
+            Element::Text {
+                ref mut font_size, ..
+            } => {
+                *font_size = Some(size);
+            }
+            Element::TextInput {
+                ref mut font_size, ..
+            } => {
+                *font_size = Some(size);
+            }
+            _ => {}
         }
         self
     }
@@ -615,6 +665,18 @@ impl<M: Clone + 'static> Element<M> {
         } = self
         {
             *text_align = align;
+        }
+        self
+    }
+
+    // placeholder (text_input only)
+    pub fn placeholder(mut self, text: &str) -> Self {
+        if let Element::TextInput {
+            ref mut placeholder,
+            ..
+        } = self
+        {
+            *placeholder = text.to_string();
         }
         self
     }
@@ -658,10 +720,14 @@ pub fn button<M: Clone + 'static>(label: &str) -> Element<M> {
     }
 }
 
-pub fn text_input<M: Clone + 'static>(id: &str, placeholder: &str) -> Element<M> {
+pub fn text_input<M: Clone + 'static>(id: &str) -> Element<M> {
     Element::TextInput {
         id: id.to_string(),
-        placeholder: placeholder.to_string(),
+        placeholder: String::new(),
+        placeholder_color: None,
+        text_color: None,
+        font: None,
+        font_size: None,
         value: None,
         style: Style::default(),
         on_change: None,

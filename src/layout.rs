@@ -90,16 +90,29 @@ fn build_taffy_node<M: Clone + 'static>(
                 .unwrap()
         }
 
-        Element::TextInput { style, .. } => {
-            let font_id = fonts.default_id().unwrap();
-            let (_, th) = fonts.measure("M", font_id);
-            let natural_w = 200.0;
-            let natural_h = th + 16.0;
+        Element::TextInput {
+            style,
+            font,
+            font_size,
+            ..
+        } => {
+            let font_id = font
+                .as_deref()
+                .and_then(|name| fonts.resolve(Some(name)))
+                .unwrap_or_else(|| fonts.default_id().unwrap());
+            let size = font_size.unwrap_or(fonts.get(font_id).size);
+            let (_, th) = fonts.measure_sized("M", font_id, size);
+            let pad_v = if style.padding.top > 0.0 {
+                style.padding.top + style.padding.bottom
+            } else {
+                16.0
+            };
+            let natural_h = th + pad_v;
             taffy
                 .new_leaf(taffy::Style {
                     size: taffy::geometry::Size {
                         width: match &style.width {
-                            Val::Auto => Dimension::Length(natural_w),
+                            Val::Auto => Dimension::Length(200.0),
                             other => val_to_dimension(other),
                         },
                         height: match &style.height {

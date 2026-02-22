@@ -216,8 +216,12 @@ fn draw_clipped<M: Clone + 'static>(
         Element::TextInput {
             id,
             placeholder,
+            placeholder_color,
+            text_color,
+            font,
+            font_size,
             value,
-            style: _,
+            style,
             on_change,
             resolved_x,
             resolved_y,
@@ -230,23 +234,21 @@ fn draw_clipped<M: Clone + 'static>(
 
             let value_str = value.as_deref().unwrap_or("");
 
-            // stash value and callback in state so the runner can reach them during key events
             ti::cache_value(state, id, value_str);
             if let Some(cb) = on_change.take() {
                 ti::register_callback(state, id, cb);
             }
 
-            // update focus
             let x = *resolved_x;
             let y = *resolved_y;
             let w = *resolved_w;
             let h = *resolved_h;
+
             let hovered = mouse_x >= x && mouse_x <= x + w && mouse_y >= y && mouse_y <= y + h;
             if left_just_pressed {
                 state.get_or_default_mut::<ti::TextInputState>(id).focused = hovered;
             }
 
-            // clamp cursor in case value shrank
             {
                 let s = state.get_or_default_mut::<ti::TextInputState>(id);
                 s.cursor = s.cursor.min(value_str.len());
@@ -254,29 +256,74 @@ fn draw_clipped<M: Clone + 'static>(
 
             let focused = state.get_or_default::<ti::TextInputState>(id).focused;
 
-            // draw box
-            let bg = if focused {
+            // background
+            let default_bg = if focused {
                 Color::new(0.18, 0.18, 0.22, 1.0)
             } else if hovered {
                 Color::new(0.16, 0.16, 0.20, 1.0)
             } else {
                 Color::new(0.13, 0.13, 0.17, 1.0)
             };
-            let border = if focused {
+            let bg = style.background.unwrap_or(default_bg);
+
+            // border
+            let default_border = if focused {
                 Color::new(0.4, 0.5, 0.9, 1.0)
             } else {
                 Color::new(0.3, 0.3, 0.35, 1.0)
             };
-            sr.draw_rounded_rect(x, y, w, h, 4.0, bg.to_array(), border.to_array(), 1.5);
+            let border_col = style.border_color.unwrap_or(default_border);
+            let border_w = if style.border_thickness > 0.0 {
+                style.border_thickness
+            } else {
+                1.5
+            };
+            let radius = if style.border_radius > 0.0 {
+                style.border_radius
+            } else {
+                4.0
+            };
 
-            // draw text or placeholder
-            let pad = 8.0;
-            let font_id = fonts.default_id().unwrap();
+            sr.draw_rounded_rect(
+                x,
+                y,
+                w,
+                h,
+                radius,
+                with_opacity(bg.to_array(), style.opacity),
+                with_opacity(border_col.to_array(), style.opacity),
+                border_w,
+            );
+
+            // font
+            let font_id = font
+                .as_deref()
+                .and_then(|name| fonts.resolve(Some(name)))
+                .unwrap_or_else(|| fonts.default_id().unwrap());
             let family = fonts.get(font_id).family.clone();
-            let size = fonts.get(font_id).size;
-            let (_, th) = fonts.measure("M", font_id);
-            let ty = y + (h - th) / 2.0;
+            let size = font_size.unwrap_or(fonts.get(font_id).size);
+
+            // padding — use style padding if set, else default 8px horizontal, centered vertical
+            let pad_l = if style.padding.left > 0.0 {
+                style.padding.left
+            } else {
+                8.0
+            };
+            let pad_r = if style.padding.right > 0.0 {
+                style.padding.right
+            } else {
+                8.0
+            };
+            let (_, th) = fonts.measure_sized("M", font_id, size);
+            let ty = if style.padding.top > 0.0 {
+                y + style.padding.top
+            } else {
+                y + (h - th) / 2.0
+            };
+
+            // text or placeholder
             if value_str.is_empty() {
+                let col = placeholder_color.unwrap_or(Color::new(0.45, 0.45, 0.5, 1.0));
                 tr.draw(
                     &mut fonts.font_system,
                     family,
@@ -285,13 +332,14 @@ fn draw_clipped<M: Clone + 'static>(
                     false,
                     TextAlign::Left,
                     placeholder,
-                    x + pad,
+                    x + pad_l,
                     ty,
-                    w - pad * 2.0,
+                    w - pad_l - pad_r,
                     clip,
-                    Color::new(0.45, 0.45, 0.5, 1.0),
+                    with_opacity(col.to_array(), style.opacity).into(),
                 );
             } else {
+                let col = text_color.unwrap_or(Color::new(0.92, 0.92, 0.95, 1.0));
                 tr.draw(
                     &mut fonts.font_system,
                     family,
@@ -300,24 +348,25 @@ fn draw_clipped<M: Clone + 'static>(
                     false,
                     TextAlign::Left,
                     value_str,
-                    x + pad,
+                    x + pad_l,
                     ty,
-                    w - pad * 2.0,
+                    w - pad_l - pad_r,
                     clip,
-                    Color::new(0.92, 0.92, 0.95, 1.0),
+                    with_opacity(col.to_array(), style.opacity).into(),
                 );
             }
 
-            // draw cursor
+            // cursor
             if focused {
                 let cursor = state.get_or_default::<ti::TextInputState>(id).cursor;
-                let (cursor_x, _) = fonts.measure(&value_str[..cursor], font_id);
+                let (cursor_x, _) = fonts.measure_sized(&value_str[..cursor], font_id, size);
+                let cursor_col = text_color.unwrap_or(Color::new(0.7, 0.75, 1.0, 1.0));
                 sr.draw_rect(
-                    x + pad + cursor_x,
-                    y + 4.0,
+                    x + pad_l + cursor_x,
+                    ty,
                     1.5,
-                    h - 8.0,
-                    Color::new(0.7, 0.75, 1.0, 1.0).to_array(),
+                    th,
+                    with_opacity(cursor_col.to_array(), style.opacity),
                     [0.0; 4],
                     0.0,
                 );
