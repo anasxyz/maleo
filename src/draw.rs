@@ -72,8 +72,17 @@ fn draw_clipped(
                 return;
             }
             let font_id = fonts.resolve(font.as_deref()).unwrap();
-            let family = fonts.get(font_id).family.clone(); // clone before font_system borrow
+            let family = fonts.get(font_id).family.clone();
             let size = font_size.unwrap_or(fonts.get(font_id).size);
+            let width = if *text_align != TextAlign::Left {
+                let (w, _) = match font_size {
+                    Some(s) => fonts.measure_sized(content, font_id, *s),
+                    None => fonts.measure(content, font_id),
+                };
+                w
+            } else {
+                f32::MAX
+            };
             tr.draw(
                 &mut fonts.font_system,
                 family,
@@ -84,6 +93,7 @@ fn draw_clipped(
                 content,
                 style.x,
                 style.y,
+                width,
                 *color,
             );
         }
@@ -170,6 +180,7 @@ fn draw_clipped(
                 label,
                 tx,
                 ty,
+                *resolved_w,
                 Color::rgb(0.92, 0.92, 0.95),
             );
 

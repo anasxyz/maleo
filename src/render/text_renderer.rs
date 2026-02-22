@@ -11,6 +11,7 @@ struct TextEntry {
     buffer: Buffer,
     x: f32,
     y: f32,
+    width: f32,
     scale: f32,
     text: String,
     family: String,
@@ -82,6 +83,7 @@ impl TextRenderer {
         text: &str,
         x: f32,
         y: f32,
+        width: f32,
         color: Color,
     ) {
         let glyphon_color = GlyphonColor::rgb(
@@ -128,7 +130,8 @@ impl TextRenderer {
                 || entry.size != size
                 || entry.weight != weight
                 || entry.italic != italic
-                || entry.text_align != text_align;
+                || entry.text_align != text_align
+                || entry.width != width;
             if content_changed {
                 entry.text = text.to_string();
                 entry.family = family.clone();
@@ -136,12 +139,17 @@ impl TextRenderer {
                 entry.weight = weight;
                 entry.italic = italic;
                 entry.text_align = text_align;
+                entry.width = width;
                 entry
                     .buffer
                     .set_metrics(font_system, Metrics::new(size, line_height));
                 entry.buffer.set_size(
                     font_system,
-                    Some(self.screen_width - x),
+                    Some(if width == f32::MAX {
+                        self.screen_width - x
+                    } else {
+                        width
+                    }),
                     Some(self.screen_height - y),
                 );
                 entry
@@ -154,7 +162,11 @@ impl TextRenderer {
             let mut buffer = Buffer::new(font_system, Metrics::new(size, line_height));
             buffer.set_size(
                 font_system,
-                Some(self.screen_width - x),
+                Some(if width == f32::MAX {
+                    self.screen_width - x
+                } else {
+                    width
+                }),
                 Some(self.screen_height - y),
             );
             buffer.set_text(font_system, text, &attrs, Shaping::Advanced);
@@ -164,6 +176,7 @@ impl TextRenderer {
                 buffer,
                 x,
                 y,
+                width,
                 scale,
                 text: text.to_string(),
                 family,
