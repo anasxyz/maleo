@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
@@ -123,6 +124,8 @@ struct Runner<A: App> {
     mouse_right_just_pressed: bool,
     mouse_middle_pressed: bool,
     mouse_middle_just_pressed: bool,
+    // exclusive task tracking, keyed by call site hash, probabyl should change
+    exclusive_tasks: HashMap<u64, tokio::task::AbortHandle>,
     // modifier state baked into key events
     ctrl: bool,
     shift: bool,
@@ -163,6 +166,7 @@ impl<A: App> Runner<A> {
             mouse_right_just_pressed: false,
             mouse_middle_pressed: false,
             mouse_middle_just_pressed: false,
+            exclusive_tasks: HashMap::new(),
             ctrl: false,
             shift: false,
             alt: false,
@@ -203,14 +207,31 @@ impl<A: App> Runner<A> {
         }
     }
 
-    // spawn a vec of tasks, each sends its action through tx and wakes winit
-    fn spawn_tasks(&self, tasks: Vec<Task<A::Action>>) {
+    // spawn a vec of tasks
+    // handles exclusive cancellation automatically
+    fn spawn_tasks(&mut self, tasks: Vec<Task<A::Action>>) {
         for task in tasks {
+            let exclusive_key = task.exclusive_key;
+
+            // if exclusive, cancel any previous task from the same call site
+            if let Some(key) = exclusive_key {
+                if let Some(old_handle) = self.exclusive_tasks.remove(&key) {
+                    old_handle.abort();
+                }
+            }
+
             let tx = self.tx.clone();
             let proxy = self.proxy.clone();
-            task.spawn(move |action| {
+            let send = Arc::new(move |action| {
                 let _ = tx.send(action);
                 let _ = proxy.send_event(Wake);
+            });
+
+            let exclusive_tasks = &mut self.exclusive_tasks;
+            task.spawn(send, |handle| {
+                if let Some(key) = exclusive_key {
+                    exclusive_tasks.insert(key, handle);
+                }
             });
         }
     }

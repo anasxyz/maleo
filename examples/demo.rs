@@ -6,14 +6,11 @@ use std::time::Duration;
 #[derive(Clone)]
 enum Action {
     Tick,
-
     FetchWeather,
     WeatherLoaded(String),
     WeatherFailed,
-
     ProcessData,
     DataProcessed(u64),
-
     ShowNotification(String),
     HideNotification,
 }
@@ -41,8 +38,6 @@ impl App for MyApp {
         }
     }
 
-    // runs once on launch
-    // this just starts the clock and fetches weather
     fn start(&mut self) -> Vec<Task<Action>> {
         vec![
             Task::every(Duration::from_secs(1), Action::Tick),
@@ -58,21 +53,17 @@ impl App for MyApp {
         };
 
         let result_label = match self.result {
+            _ if self.processing => "processing...".into(),
             Some(r) => format!("result: {}", r),
-            None if self.processing => "processing...".into(),
             None => "no result yet".into(),
         };
 
         column(vec![
-            // clock
             text(&format!("uptime: {}s", self.seconds), Color::WHITE).font_size(32.0),
-            // weather
             text(&weather_label, Color::WHITE),
             button("Refresh Weather").on_click(Action::FetchWeather),
-            // cpu work
             text(&result_label, Color::WHITE),
             button("Process Data").on_click(Action::ProcessData),
-            // notification
             button("Show Notification")
                 .on_click(Action::ShowNotification("hello from bento!".into())),
             match &self.notification {
@@ -90,49 +81,49 @@ impl App for MyApp {
 
     fn update(&mut self, action: Action) -> Vec<Task<Action>> {
         match action {
-            // clock tick
             Action::Tick => {
                 self.seconds += 1;
                 vec![]
             }
 
-            // kick off a network request
             Action::FetchWeather => {
                 self.weather_loading = true;
-                println!("fetching weather");
-                vec![Task::run(async {
-                    let result = reqwest::get("https://wttr.in/?format=3").await;
-                    match result {
-                        Ok(r) => match r.text().await {
-                            Ok(text) => Action::WeatherLoaded(text),
+                vec![
+                    Task::run(async {
+                        let result = reqwest::get("https://wttr.in/?format=3").await;
+                        match result {
+                            Ok(r) => match r.text().await {
+                                Ok(text) => Action::WeatherLoaded(text),
+                                Err(_) => Action::WeatherFailed,
+                            },
                             Err(_) => Action::WeatherFailed,
-                        },
-                        Err(_) => Action::WeatherFailed,
-                    }
-                })]
+                        }
+                    })
+                    .exclusive()
+                    .timeout(Duration::from_secs(2), Action::WeatherFailed),
+                ]
             }
             Action::WeatherLoaded(data) => {
-                println!("weather loaded");
                 self.weather_loading = false;
                 self.weather = Some(data);
                 vec![]
             }
             Action::WeatherFailed => {
-                println!("weather failed");
                 self.weather_loading = false;
                 self.weather = Some("failed to load".into());
                 vec![]
             }
 
-            // kick off cpu heavy work on background thread
             Action::ProcessData => {
                 self.processing = true;
-                vec![Task::background(|| {
-                    // simulate expensive work
-                    std::thread::sleep(Duration::from_secs(2));
-                    let result: u64 = (0..1_000_000u64).sum();
-                    Action::DataProcessed(result)
-                })]
+                vec![
+                    Task::background(|| {
+                        std::thread::sleep(Duration::from_secs(2));
+                        let result: u64 = (0..1_000_000u64).sum();
+                        Action::DataProcessed(result)
+                    })
+                    .exclusive(),
+                ]
             }
             Action::DataProcessed(result) => {
                 self.processing = false;
@@ -140,13 +131,9 @@ impl App for MyApp {
                 vec![]
             }
 
-            // show a notification then auto hide after 3 seconds
             Action::ShowNotification(msg) => {
                 self.notification = Some(msg);
-                vec![Task::delay(
-                    Duration::from_secs(3),
-                    Action::HideNotification,
-                )]
+                vec![Task::delay(Duration::from_secs(3), Action::HideNotification).exclusive()]
             }
             Action::HideNotification => {
                 self.notification = None;
