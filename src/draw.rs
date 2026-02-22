@@ -79,7 +79,7 @@ fn draw_clipped(
                     Some(s) => fonts.measure_sized(content, font_id, *s),
                     None => fonts.measure(content, font_id),
                 };
-                w
+                w + 3.0
             } else {
                 f32::MAX
             };
