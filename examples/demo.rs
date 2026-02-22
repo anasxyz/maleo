@@ -62,6 +62,15 @@ impl App for MyApp {
         .height(Val::Percent(100.0))
     }
 
+    fn event(&mut self, event: Event) -> Option<Action> {
+        match event {
+            Event::KeyPressed(Key::Up) => Some(Action::Increment),
+            Event::KeyPressed(Key::Down) => Some(Action::Decrement),
+            Event::KeyPressed(Key::R) => Some(Action::Reset),
+            _ => None,
+        }
+    }
+
     fn update(&mut self, action: Action) {
         match action {
             Action::Increment => self.count += 1,

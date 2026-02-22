@@ -9,6 +9,7 @@ use winit::{
 };
 
 use crate::draw::draw;
+use crate::events::{Event, MouseButton as BentoMouseButton};
 use crate::layout::do_layout;
 use crate::{
     Color, Element, Events, Fonts, GpuContext, ShadowRenderer, ShapeRenderer, TextRenderer,
@@ -60,6 +61,9 @@ pub trait App: 'static + Sized {
     fn new() -> Self;
     fn view(&self) -> Element<Self::Action>;
     fn update(&mut self, action: Self::Action) {}
+    fn event(&mut self, event: Event) -> Option<Self::Action> {
+        None
+    }
     fn fonts(&self, fonts: &mut Fonts) {}
     fn run(settings: Settings) {
         run::<Self>(settings);
@@ -134,6 +138,13 @@ impl<A: App> Runner<A> {
         }
         if let Some(sr) = self.shape_renderer.as_mut() {
             sr.resize(w, h);
+        }
+    }
+
+    fn dispatch(&mut self, event: Event) {
+        if let Some(action) = self.app.event(event) {
+            self.app.update(action);
+            self.window().request_redraw();
         }
     }
 
@@ -284,47 +295,62 @@ impl<A: App> ApplicationHandler for Runner<A> {
                 self.events.mouse.dy = y - self.events.mouse.y;
                 self.events.mouse.x = x;
                 self.events.mouse.y = y;
+                self.dispatch(Event::MouseMoved {
+                    x,
+                    y,
+                    dx: self.events.mouse.dx,
+                    dy: self.events.mouse.dy,
+                });
                 self.window().request_redraw();
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let pressed = state == ElementState::Pressed;
-                match button {
-                    MouseButton::Left => {
-                        self.events.mouse.left_just_pressed =
-                            pressed && !self.events.mouse.left_pressed;
-                        self.events.mouse.left_just_released =
-                            !pressed && self.events.mouse.left_pressed;
-                        self.events.mouse.left_pressed = pressed;
+                let btn = match button {
+                    MouseButton::Left => Some(BentoMouseButton::Left),
+                    MouseButton::Right => Some(BentoMouseButton::Right),
+                    MouseButton::Middle => Some(BentoMouseButton::Middle),
+                    _ => None,
+                };
+                if let Some(btn) = btn {
+                    match btn {
+                        BentoMouseButton::Left => {
+                            self.events.mouse.left_just_pressed =
+                                pressed && !self.events.mouse.left_pressed;
+                            self.events.mouse.left_just_released =
+                                !pressed && self.events.mouse.left_pressed;
+                            self.events.mouse.left_pressed = pressed;
+                        }
+                        BentoMouseButton::Right => {
+                            self.events.mouse.right_just_pressed =
+                                pressed && !self.events.mouse.right_pressed;
+                            self.events.mouse.right_just_released =
+                                !pressed && self.events.mouse.right_pressed;
+                            self.events.mouse.right_pressed = pressed;
+                        }
+                        BentoMouseButton::Middle => {
+                            self.events.mouse.middle_just_pressed =
+                                pressed && !self.events.mouse.middle_pressed;
+                            self.events.mouse.middle_just_released =
+                                !pressed && self.events.mouse.middle_pressed;
+                            self.events.mouse.middle_pressed = pressed;
+                        }
                     }
-                    MouseButton::Right => {
-                        self.events.mouse.right_just_pressed =
-                            pressed && !self.events.mouse.right_pressed;
-                        self.events.mouse.right_just_released =
-                            !pressed && self.events.mouse.right_pressed;
-                        self.events.mouse.right_pressed = pressed;
+                    if pressed {
+                        self.dispatch(Event::MousePressed(btn));
+                    } else {
+                        self.dispatch(Event::MouseReleased(btn));
                     }
-                    MouseButton::Middle => {
-                        self.events.mouse.middle_just_pressed =
-                            pressed && !self.events.mouse.middle_pressed;
-                        self.events.mouse.middle_just_released =
-                            !pressed && self.events.mouse.middle_pressed;
-                        self.events.mouse.middle_pressed = pressed;
-                    }
-                    _ => {}
                 }
                 self.window().request_redraw();
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                match delta {
-                    MouseScrollDelta::LineDelta(x, y) => {
-                        self.events.mouse.scroll_x = x;
-                        self.events.mouse.scroll_y = y;
-                    }
-                    MouseScrollDelta::PixelDelta(pos) => {
-                        self.events.mouse.scroll_x = pos.x as f32;
-                        self.events.mouse.scroll_y = pos.y as f32;
-                    }
-                }
+                let (x, y) = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => (x, y),
+                    MouseScrollDelta::PixelDelta(pos) => (pos.x as f32, pos.y as f32),
+                };
+                self.events.mouse.scroll_x = x;
+                self.events.mouse.scroll_y = y;
+                self.dispatch(Event::MouseScrolled { x, y });
                 self.window().request_redraw();
             }
             WindowEvent::KeyboardInput { event, .. } => {
@@ -333,10 +359,20 @@ impl<A: App> ApplicationHandler for Runner<A> {
                     if event.state == ElementState::Pressed {
                         self.events.keyboard.pressed.insert(key);
                         self.events.keyboard.just_pressed.insert(key);
+                        self.dispatch(Event::KeyPressed(key));
                     } else {
                         self.events.keyboard.pressed.remove(&key);
                         self.events.keyboard.just_released.insert(key);
+                        self.dispatch(Event::KeyReleased(key));
                     }
+                }
+                self.window().request_redraw();
+            }
+            WindowEvent::Focused(focused) => {
+                if focused {
+                    self.dispatch(Event::Focused);
+                } else {
+                    self.dispatch(Event::Unfocused);
                 }
                 self.window().request_redraw();
             }
@@ -348,6 +384,7 @@ impl<A: App> ApplicationHandler for Runner<A> {
                 let (w, h) = self.logical_size();
                 self.on_resize(w, h);
                 self.resize_shadow(w, h);
+                self.dispatch(Event::ScaleFactorChanged(scale_factor));
                 self.window().request_redraw();
             }
             WindowEvent::Resized(size) => {
@@ -355,13 +392,20 @@ impl<A: App> ApplicationHandler for Runner<A> {
                 let (w, h) = self.logical_size();
                 self.on_resize(w, h);
                 self.resize_shadow(w, h);
+                self.dispatch(Event::Resized {
+                    width: w,
+                    height: h,
+                });
                 self.window().request_redraw();
             }
             WindowEvent::RedrawRequested => {
                 self.render();
                 self.events.clear_frame_state();
             }
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                self.dispatch(Event::CloseRequested);
+                event_loop.exit();
+            }
             _ => {}
         }
     }

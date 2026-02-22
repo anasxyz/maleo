@@ -394,3 +394,32 @@ pub fn key_code_to_key(key: KeyCode) -> Key {
         _ => Key::Unknown,
     }
 }
+
+// all events the app can respond to
+
+#[derive(Debug, Clone)]
+pub enum Event {
+    // keyboard
+    KeyPressed(Key),
+    KeyReleased(Key),
+
+    // mouse
+    MouseMoved { x: f32, y: f32, dx: f32, dy: f32 },
+    MousePressed(MouseButton),
+    MouseReleased(MouseButton),
+    MouseScrolled { x: f32, y: f32 },
+
+    // window
+    Resized { width: f32, height: f32 },
+    ScaleFactorChanged(f64),
+    Focused,
+    Unfocused,
+    CloseRequested,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MouseButton {
+    Left,
+    Right,
+    Middle,
+}
