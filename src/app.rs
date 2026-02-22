@@ -13,6 +13,7 @@ use winit::{
 use crate::draw::draw;
 use crate::events::{Event, Key, MouseButton};
 use crate::layout::do_layout;
+use crate::state::StateStore;
 use crate::task::Task;
 use crate::{Color, Element, Fonts, GpuContext, ShadowRenderer, ShapeRenderer, TextRenderer};
 
@@ -109,6 +110,7 @@ struct Runner<A: App> {
     shape_renderer: Option<ShapeRenderer>,
     shadow_renderer: Option<ShadowRenderer>,
     fonts: Option<Fonts>,
+    state: StateStore,
     clear_color: Color,
     // task infrastructure
     proxy: EventLoopProxy<Wake>,
@@ -124,7 +126,7 @@ struct Runner<A: App> {
     mouse_right_just_pressed: bool,
     mouse_middle_pressed: bool,
     mouse_middle_just_pressed: bool,
-    // exclusive task tracking, keyed by call site hash, probabyl should change
+    // exclusive task tracking — keyed by call site hash
     exclusive_tasks: HashMap<u64, tokio::task::AbortHandle>,
     // modifier state baked into key events
     ctrl: bool,
@@ -153,6 +155,7 @@ impl<A: App> Runner<A> {
             shape_renderer: None,
             shadow_renderer: None,
             fonts: None,
+            state: StateStore::new(),
             clear_color: settings.clear_color,
             proxy,
             tx,
@@ -207,8 +210,7 @@ impl<A: App> Runner<A> {
         }
     }
 
-    // spawn a vec of tasks
-    // handles exclusive cancellation automatically
+    // spawn a vec of tasks — handles exclusive cancellation automatically
     fn spawn_tasks(&mut self, tasks: Vec<Task<A::Action>>) {
         for task in tasks {
             let exclusive_key = task.exclusive_key;
@@ -275,6 +277,7 @@ impl<A: App> Runner<A> {
             self.shadow_renderer.as_mut().unwrap(),
             self.text_renderer.as_mut().unwrap(),
             self.fonts.as_mut().unwrap(),
+            &mut self.state,
             self.mouse_x,
             self.mouse_y,
             self.mouse_left_just_pressed,

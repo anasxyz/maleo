@@ -22,6 +22,7 @@ mod element;
 mod events;
 mod fonts;
 mod layout;
+pub(crate) mod state;
 mod task;
 
 pub use app::{App, Settings};

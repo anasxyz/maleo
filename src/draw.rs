@@ -1,3 +1,4 @@
+use crate::state::StateStore;
 use crate::{
     Color, Element, Fonts, Overflow, ShadowRenderer, ShapeRenderer, TextAlign, TextRenderer,
 };
@@ -8,6 +9,7 @@ pub fn draw<M: Clone + 'static>(
     shadow_renderer: &mut ShadowRenderer,
     text_renderer: &mut TextRenderer,
     fonts: &mut Fonts,
+    state: &mut StateStore,
     mouse_x: f32,
     mouse_y: f32,
     left_just_pressed: bool,
@@ -19,6 +21,7 @@ pub fn draw<M: Clone + 'static>(
         shadow_renderer,
         text_renderer,
         fonts,
+        state,
         mouse_x,
         mouse_y,
         left_just_pressed,
@@ -34,6 +37,7 @@ fn draw_clipped<M: Clone + 'static>(
     shadow: &mut ShadowRenderer,
     tr: &mut TextRenderer,
     fonts: &mut Fonts,
+    state: &mut StateStore,
     mouse_x: f32,
     mouse_y: f32,
     left_just_pressed: bool,
@@ -245,6 +249,7 @@ fn draw_clipped<M: Clone + 'static>(
                     shadow,
                     tr,
                     fonts,
+                    state,
                     mouse_x,
                     mouse_y,
                     left_just_pressed,
@@ -291,6 +296,7 @@ fn draw_clipped<M: Clone + 'static>(
                     shadow,
                     tr,
                     fonts,
+                    state,
                     mouse_x,
                     mouse_y,
                     left_just_pressed,
