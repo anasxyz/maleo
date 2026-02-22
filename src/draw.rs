@@ -1,14 +1,8 @@
 use crate::state::StateStore;
+use crate::widgets::text_input as ti;
 use crate::{
     Color, Element, Fonts, Overflow, ShadowRenderer, ShapeRenderer, TextAlign, TextRenderer,
 };
-
-// internal state stored per text input widget — only cursor and focus, not the value
-#[derive(Default)]
-pub struct TextInputState {
-    pub focused: bool,
-    pub cursor: usize,
-}
 
 pub fn draw<M: Clone + 'static>(
     element: &mut Element<M>,
@@ -21,7 +15,7 @@ pub fn draw<M: Clone + 'static>(
     mouse_y: f32,
     left_just_pressed: bool,
 ) -> Vec<M> {
-    let mut actions: Vec<M> = Vec::new();
+    let mut actions = Vec::new();
     draw_clipped(
         element,
         shape_renderer,
@@ -39,7 +33,7 @@ pub fn draw<M: Clone + 'static>(
 }
 
 fn draw_clipped<M: Clone + 'static>(
-    element: &mut Element<M>,
+    el: &mut Element<M>,
     sr: &mut ShapeRenderer,
     shadow: &mut ShadowRenderer,
     tr: &mut TextRenderer,
@@ -51,7 +45,7 @@ fn draw_clipped<M: Clone + 'static>(
     clip: Option<[f32; 4]>,
     actions: &mut Vec<M>,
 ) {
-    match element {
+    match el {
         Element::Empty => {}
 
         Element::Rect {
@@ -192,7 +186,7 @@ fn draw_clipped<M: Clone + 'static>(
             );
 
             let font_id = fonts.default_id().unwrap();
-            let family = fonts.get(font_id).family.clone(); // clone before font_system borrow
+            let family = fonts.get(font_id).family.clone();
             let size = fonts.get(font_id).size;
             let (tw, th) = fonts.measure(label, font_id);
             let tx = *resolved_x + (*resolved_w - tw) / 2.0;
@@ -234,39 +228,33 @@ fn draw_clipped<M: Clone + 'static>(
                 return;
             }
 
-            // clamp cursor to current value length in case value shrank externally
             let value_str = value.as_deref().unwrap_or("");
-            {
-                let s = state.get_or_default_mut::<TextInputState>(id);
-                if s.cursor > value_str.len() {
-                    s.cursor = value_str.len();
-                }
-            }
 
-            // cache current value in state so runner can access it on key events
-            state.set_input_value(id, value_str);
-
-            // register callback each frame so runner can call it on key events
+            // stash value and callback in state so the runner can reach them during key events
+            ti::cache_value(state, id, value_str);
             if let Some(cb) = on_change.take() {
-                state.register_text_callback(id, cb);
+                ti::register_callback(state, id, cb);
             }
 
+            // update focus
             let x = *resolved_x;
             let y = *resolved_y;
             let w = *resolved_w;
             let h = *resolved_h;
-
-            // click to focus
             let hovered = mouse_x >= x && mouse_x <= x + w && mouse_y >= y && mouse_y <= y + h;
-            if hovered && left_just_pressed {
-                state.get_or_default_mut::<TextInputState>(id).focused = true;
-            } else if left_just_pressed && !hovered {
-                state.get_or_default_mut::<TextInputState>(id).focused = false;
+            if left_just_pressed {
+                state.get_or_default_mut::<ti::TextInputState>(id).focused = hovered;
             }
 
-            let focused = state.get_or_default::<TextInputState>(id).focused;
+            // clamp cursor in case value shrank
+            {
+                let s = state.get_or_default_mut::<ti::TextInputState>(id);
+                s.cursor = s.cursor.min(value_str.len());
+            }
 
-            // background
+            let focused = state.get_or_default::<ti::TextInputState>(id).focused;
+
+            // draw box
             let bg = if focused {
                 Color::new(0.18, 0.18, 0.22, 1.0)
             } else if hovered {
@@ -279,21 +267,19 @@ fn draw_clipped<M: Clone + 'static>(
             } else {
                 Color::new(0.3, 0.3, 0.35, 1.0)
             };
-
             sr.draw_rounded_rect(x, y, w, h, 4.0, bg.to_array(), border.to_array(), 1.5);
 
-            // text or placeholder
+            // draw text or placeholder
             let pad = 8.0;
             let font_id = fonts.default_id().unwrap();
             let family = fonts.get(font_id).family.clone();
             let size = fonts.get(font_id).size;
             let (_, th) = fonts.measure("M", font_id);
             let ty = y + (h - th) / 2.0;
-
             if value_str.is_empty() {
                 tr.draw(
                     &mut fonts.font_system,
-                    family.clone(),
+                    family,
                     size,
                     400,
                     false,
@@ -308,7 +294,7 @@ fn draw_clipped<M: Clone + 'static>(
             } else {
                 tr.draw(
                     &mut fonts.font_system,
-                    family.clone(),
+                    family,
                     size,
                     400,
                     false,
@@ -322,14 +308,12 @@ fn draw_clipped<M: Clone + 'static>(
                 );
             }
 
-            // cursor
+            // draw cursor
             if focused {
-                let cursor_pos = state.get_or_default::<TextInputState>(id).cursor;
-                let text_before = &value_str[..cursor_pos.min(value_str.len())];
-                let (cursor_x, _) = fonts.measure(text_before, font_id);
-                let cx = x + pad + cursor_x;
+                let cursor = state.get_or_default::<ti::TextInputState>(id).cursor;
+                let (cursor_x, _) = fonts.measure(&value_str[..cursor], font_id);
                 sr.draw_rect(
-                    cx,
+                    x + pad + cursor_x,
                     y + 4.0,
                     1.5,
                     h - 8.0,
@@ -523,93 +507,4 @@ fn make_child_clip(
 fn with_opacity(mut color: [f32; 4], opacity: f32) -> [f32; 4] {
     color[3] *= opacity;
     color
-}
-
-// process a key event for a focused input — takes current value, returns new value if changed
-// cursor lives in state, value lives in the app
-pub fn text_input_key(
-    state: &mut StateStore,
-    id: &str,
-    current_value: &str,
-    event: &crate::events::Event,
-    text: &str,
-) -> Option<String> {
-    use crate::events::{Event, Key};
-
-    let focused = state.get_or_default::<TextInputState>(id).focused;
-    if !focused {
-        return None;
-    }
-
-    let mut value = current_value.to_string();
-    let mut cursor = state
-        .get_or_default::<TextInputState>(id)
-        .cursor
-        .min(value.len());
-    let mut changed = false;
-
-    match event {
-        Event::KeyPressed {
-            key: Key::Backspace,
-            ..
-        } => {
-            if cursor > 0 {
-                if let Some((i, _)) = value[..cursor].char_indices().next_back() {
-                    value.remove(i);
-                    cursor = i;
-                    changed = true;
-                }
-            }
-        }
-        Event::KeyPressed {
-            key: Key::Delete, ..
-        } => {
-            if cursor < value.len() {
-                value.remove(cursor);
-                changed = true;
-            }
-        }
-        Event::KeyPressed { key: Key::Left, .. } => {
-            if cursor > 0 {
-                if let Some((i, _)) = value[..cursor].char_indices().next_back() {
-                    cursor = i;
-                }
-            }
-        }
-        Event::KeyPressed {
-            key: Key::Right, ..
-        } => {
-            if cursor < value.len() {
-                cursor = value[cursor..]
-                    .char_indices()
-                    .nth(1)
-                    .map(|(i, _)| cursor + i)
-                    .unwrap_or(value.len());
-            }
-        }
-        Event::KeyPressed { key: Key::Home, .. } => {
-            cursor = 0;
-        }
-        Event::KeyPressed { key: Key::End, .. } => {
-            cursor = value.len();
-        }
-        Event::KeyPressed { .. } => {
-            // use the actual text from the OS — handles shift, locale, keyboard layout
-            if !text.is_empty() && text != "\r" && text != "\n" && text != "\r\n" {
-                value.insert_str(cursor, text);
-                cursor += text.len();
-                changed = true;
-            }
-        }
-        _ => {}
-    }
-
-    state.get_or_default_mut::<TextInputState>(id).cursor = cursor;
-
-    if changed { Some(value) } else { None }
-}
-
-// scan state to find which text input (if any) is currently focused
-pub fn find_focused_input(state: &StateStore) -> Option<String> {
-    state.find_focused_text_input()
 }

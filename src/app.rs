@@ -10,11 +10,12 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::draw::{draw, text_input_key};
+use crate::draw::draw;
 use crate::events::{Event, Key, MouseButton};
 use crate::layout::do_layout;
 use crate::state::StateStore;
 use crate::task::Task;
+use crate::widgets::text_input as ti;
 use crate::{Color, Element, Fonts, GpuContext, ShadowRenderer, ShapeRenderer, TextRenderer};
 
 // settings
@@ -273,9 +274,6 @@ impl<A: App> Runner<A> {
         let mut tree = self.app.view();
         do_layout(&mut tree, width, height, self.fonts.as_mut().unwrap());
 
-        // clear callbacks from last frame — draw pass will re-register them
-        self.state.clear_text_callbacks();
-
         let actions = draw(
             &mut tree,
             self.shape_renderer.as_mut().unwrap(),
@@ -343,7 +341,7 @@ impl<A: App> Runner<A> {
         }
 
         // update focused input id by scanning state
-        self.focused_input_id = crate::draw::find_focused_input(&self.state);
+        self.focused_input_id = ti::find_focused(&self.state);
 
         self.mouse_left_just_pressed = false;
         self.mouse_right_just_pressed = false;
@@ -497,28 +495,28 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
 
                     // forward to focused text input first — consumes the event if handled
                     let mut consumed = false;
-                    eprintln!(
-                        "KEY: focused_input_id={:?} pressed={}",
-                        self.focused_input_id, pressed
-                    );
                     if let Some(id) = &self.focused_input_id.clone() {
-                        let current_value = self.state.get_input_value(id);
+                        let current_value = ti::get_cached_value(&self.state, id);
                         let text = if pressed && !ctrl {
                             event.text.as_ref().map(|t| t.as_str()).unwrap_or("")
                         } else {
                             ""
                         };
                         eprintln!(
+                            "KEY: focused_input_id={:?} pressed={}",
+                            self.focused_input_id, pressed
+                        );
+                        eprintln!(
                             "  id={} current_value={:?} text={:?}",
                             id, current_value, text
                         );
                         if let Some(new_value) =
-                            text_input_key(&mut self.state, id, &current_value, &bento_event, text)
+                            ti::handle_key(&mut self.state, id, &current_value, &bento_event, text)
                         {
                             eprintln!("  new_value={:?}", new_value);
                             consumed = true;
                             if let Some(action) =
-                                self.state.call_text_callback::<A::Action>(id, new_value)
+                                ti::call_callback::<A::Action>(&self.state, id, new_value)
                             {
                                 eprintln!("  callback fired");
                                 let tasks = self.app.update(action);
