@@ -1,6 +1,4 @@
-use crate::{
-    Color, Element, Events, Font, Fonts, Overflow, ShadowRenderer, ShapeRenderer, TextRenderer,
-};
+use crate::{Color, Element, Events, Fonts, Overflow, ShadowRenderer, ShapeRenderer, TextRenderer};
 
 pub fn draw(
     element: &mut Element,
@@ -70,14 +68,9 @@ fn draw_clipped(
             if is_outside(style.x, style.y, 1.0, 1.0, clip) {
                 return;
             }
-            let font_id = match font {
-                Font::Name(name) => fonts.get_by_name(name).or_else(|| fonts.default()),
-                Font::Default => fonts.default(),
-            };
-            let font_id = font_id.unwrap();
-            let entry = fonts.get(font_id);
-            let family = entry.family.clone();
-            let size = font_size.unwrap_or(entry.size);
+            let font_id = fonts.resolve(font.as_deref()).unwrap();
+            let family = fonts.get(font_id).family.clone(); // clone before font_system borrow
+            let size = font_size.unwrap_or(fonts.get(font_id).size);
             tr.draw(
                 &mut fonts.font_system,
                 family,
@@ -157,10 +150,9 @@ fn draw_clipped(
                 clip,
             );
 
-            let font_id = fonts.default().unwrap();
-            let entry = fonts.get(font_id);
-            let family = entry.family.clone();
-            let size = entry.size;
+            let font_id = fonts.default_id().unwrap();
+            let family = fonts.get(font_id).family.clone(); // clone before font_system borrow
+            let size = fonts.get(font_id).size;
             let (tw, th) = fonts.measure(label, font_id);
             let tx = *resolved_x + (*resolved_w - tw) / 2.0;
             let ty = *resolved_y + (*resolved_h - th) / 2.0;
@@ -264,11 +256,9 @@ fn draw_shape(
     color: [f32; 4],
     border_radius: f32,
     border_color: [f32; 4],
-    border_width: f32,
+    border_thickness: f32,
     clip: Option<[f32; 4]>,
 ) {
-    let outline_color = border_color;
-    let outline_thickness = border_width;
     if border_radius > 0.0 {
         if let Some([cx, cy, cx2, cy2]) = clip {
             if x < cx || y < cy || x + w > cx2 || y + h > cy2 {
@@ -283,13 +273,29 @@ fn draw_shape(
             h,
             border_radius,
             color,
-            outline_color,
-            outline_thickness,
+            border_color,
+            border_thickness,
         );
     } else if let Some([cx, cy, cx2, cy2]) = clip {
         sr.draw_rect_clipped(x, y, w, h, color, [cx, cy, cx2, cy2]);
     } else {
-        sr.draw_rect(x, y, w, h, color, outline_color, outline_thickness);
+        sr.draw_rect(x, y, w, h, color, border_color, border_thickness);
+    }
+}
+
+fn draw_shadow(shadow: &mut ShadowRenderer, x: f32, y: f32, w: f32, h: f32, style: &crate::Style) {
+    if style.shadow_color.a > 0.0 && style.shadow_blur > 0.0 {
+        shadow.draw_shadow(
+            x,
+            y,
+            w,
+            h,
+            with_opacity(style.shadow_color.to_array(), style.opacity),
+            style.border_radius,
+            style.shadow_blur,
+            style.shadow_offset_x,
+            style.shadow_offset_y,
+        );
     }
 }
 
@@ -328,20 +334,4 @@ fn make_child_clip(
 fn with_opacity(mut color: [f32; 4], opacity: f32) -> [f32; 4] {
     color[3] *= opacity;
     color
-}
-
-fn draw_shadow(shadow: &mut ShadowRenderer, x: f32, y: f32, w: f32, h: f32, style: &crate::Style) {
-    if style.shadow_color.a > 0.0 && style.shadow_blur > 0.0 {
-        shadow.draw_shadow(
-            x,
-            y,
-            w,
-            h,
-            with_opacity(style.shadow_color.to_array(), style.opacity),
-            style.border_radius,
-            style.shadow_blur,
-            style.shadow_offset_x,
-            style.shadow_offset_y,
-        );
-    }
 }

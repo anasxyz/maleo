@@ -256,11 +256,9 @@ impl<A: App> ApplicationHandler for Runner<A> {
 
         let mut fonts = Fonts::new();
         self.app.fonts(&mut fonts);
-        if fonts.default().is_none() {
-            let default_font_id = fonts.add("default", "Arial", 14.0);
-            fonts.set_default(default_font_id);
+        if fonts.default.is_none() {
+            fonts.add("default", "Arial", 14.0).default();
         }
-
         self.fonts = Some(fonts);
         self.window().request_redraw();
     }

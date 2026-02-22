@@ -1,6 +1,6 @@
 use taffy::prelude::*;
 
-use crate::{Align, Element, Fonts, Font, Overflow, Position, Val};
+use crate::{Align, Element, Fonts, Overflow, Position, Val};
 
 pub fn do_layout(element: &mut Element, width: f32, height: f32, fonts: &mut Fonts) {
     let mut taffy: TaffyTree<()> = TaffyTree::new();
@@ -20,11 +20,7 @@ fn build_taffy_node(taffy: &mut TaffyTree<()>, element: &Element, fonts: &mut Fo
         Element::Empty => taffy.new_leaf(taffy::Style::default()).unwrap(),
 
         Element::Text { content, font, font_size, style, .. } => {
-            let font_id = match font {
-                Font::Name(name) => fonts.get_by_name(name).or_else(|| fonts.default()),
-                Font::Default => fonts.default(),
-            };
-            let font_id = font_id.unwrap();
+            let font_id = fonts.resolve(font.as_deref()).unwrap();
             let (w, h) = match font_size {
                 Some(size) => fonts.measure_sized(content, font_id, *size),
                 None => fonts.measure(content, font_id),
@@ -50,7 +46,7 @@ fn build_taffy_node(taffy: &mut TaffyTree<()>, element: &Element, fonts: &mut Fo
         }
 
         Element::Button { label, style, .. } => {
-            let font_id = fonts.default().unwrap();
+            let font_id = fonts.default_id().unwrap();
             let (tw, th) = fonts.measure(label, font_id);
             let natural_w = tw + 24.0;
             let natural_h = th + 12.0;
@@ -106,37 +102,22 @@ fn apply_layout(taffy: &TaffyTree<()>, element: &mut Element, node: NodeId, pare
 
     match element {
         Element::Empty => {}
-        Element::Text { style, .. } => {
-            style.x = x;
-            style.y = y;
-        }
+        Element::Text { style, .. } => { style.x = x; style.y = y; }
         Element::Rect { style, resolved_w, resolved_h, .. } => {
-            style.x = x;
-            style.y = y;
-            *resolved_w = w;
-            *resolved_h = h;
+            style.x = x; style.y = y; *resolved_w = w; *resolved_h = h;
         }
         Element::Button { resolved_x, resolved_y, resolved_w, resolved_h, .. } => {
-            *resolved_x = x;
-            *resolved_y = y;
-            *resolved_w = w;
-            *resolved_h = h;
+            *resolved_x = x; *resolved_y = y; *resolved_w = w; *resolved_h = h;
         }
         Element::Row { style, children, resolved_w, resolved_h } => {
-            style.x = x;
-            style.y = y;
-            *resolved_w = w;
-            *resolved_h = h;
+            style.x = x; style.y = y; *resolved_w = w; *resolved_h = h;
             let child_nodes = taffy.children(node).unwrap();
             for (child, child_node) in children.iter_mut().zip(child_nodes.iter()) {
                 apply_layout(taffy, child, *child_node, x, y);
             }
         }
         Element::Column { style, children, resolved_w, resolved_h } => {
-            style.x = x;
-            style.y = y;
-            *resolved_w = w;
-            *resolved_h = h;
+            style.x = x; style.y = y; *resolved_w = w; *resolved_h = h;
             let child_nodes = taffy.children(node).unwrap();
             for (child, child_node) in children.iter_mut().zip(child_nodes.iter()) {
                 apply_layout(taffy, child, *child_node, x, y);
@@ -145,21 +126,11 @@ fn apply_layout(taffy: &TaffyTree<()>, element: &mut Element, node: NodeId, pare
     }
 }
 
-// conversion helpers
-
 fn val_to_dimension(v: &Val) -> Dimension {
     match v {
         Val::Auto => Dimension::Auto,
         Val::Px(v) => Dimension::Length(*v),
         Val::Percent(p) => Dimension::Percent(*p / 100.0),
-    }
-}
-
-fn val_to_lpa(v: &Val) -> LengthPercentageAuto {
-    match v {
-        Val::Auto => LengthPercentageAuto::Auto,
-        Val::Px(v) => LengthPercentageAuto::Length(*v),
-        Val::Percent(p) => LengthPercentageAuto::Percent(*p / 100.0),
     }
 }
 

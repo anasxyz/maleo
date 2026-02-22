@@ -1,4 +1,4 @@
-use crate::{Color, Font};
+use crate::Color;
 
 // alignment
 
@@ -220,7 +220,7 @@ pub enum Element {
     Text {
         content: String,
         color: Color,
-        font: Font,
+        font: Option<String>,
         font_size: Option<f32>,
         font_weight: u16,
         italic: bool,
@@ -439,9 +439,9 @@ impl Element {
     }
 
     // font (text only)
-    pub fn font(mut self, font_: Font) -> Self {
+    pub fn font(mut self, name: &str) -> Self {
         if let Element::Text { ref mut font, .. } = self {
-            *font = font_;
+            *font = Some(name.to_string());
         }
         self
     }
@@ -500,7 +500,7 @@ pub fn text(content: &str, color: Color) -> Element {
     Element::Text {
         content: content.to_string(),
         color,
-        font: Font::Default,
+        font: None,
         font_size: None,
         font_weight: 400,
         italic: false,
