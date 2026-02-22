@@ -2,18 +2,16 @@ use std::sync::Arc;
 
 use winit::{
     application::ApplicationHandler,
-    event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
+    event::{ElementState, MouseButton as WinitMouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::PhysicalKey,
     window::{Window, WindowId},
 };
 
 use crate::draw::draw;
-use crate::events::{Event, MouseButton as BentoMouseButton};
+use crate::events::{Event, Key, MouseButton};
 use crate::layout::do_layout;
-use crate::{
-    Color, Element, Events, Fonts, GpuContext, ShadowRenderer, ShapeRenderer, TextRenderer,
-};
+use crate::{Color, Element, Fonts, GpuContext, ShadowRenderer, ShapeRenderer, TextRenderer};
 
 // settings
 
@@ -91,8 +89,20 @@ struct Runner<A: App> {
     shape_renderer: Option<ShapeRenderer>,
     shadow_renderer: Option<ShadowRenderer>,
     fonts: Option<Fonts>,
-    events: Events,
     clear_color: Color,
+    // internal mouse state for hit testing
+    mouse_x: f32,
+    mouse_y: f32,
+    mouse_left_pressed: bool,
+    mouse_left_just_pressed: bool,
+    mouse_right_pressed: bool,
+    mouse_right_just_pressed: bool,
+    mouse_middle_pressed: bool,
+    mouse_middle_just_pressed: bool,
+    // modifier state baked into key events
+    ctrl: bool,
+    shift: bool,
+    alt: bool,
 }
 
 impl<A: App> Runner<A> {
@@ -109,8 +119,18 @@ impl<A: App> Runner<A> {
             shape_renderer: None,
             shadow_renderer: None,
             fonts: None,
-            events: Events::default(),
             clear_color: settings.clear_color,
+            mouse_x: 0.0,
+            mouse_y: 0.0,
+            mouse_left_pressed: false,
+            mouse_left_just_pressed: false,
+            mouse_right_pressed: false,
+            mouse_right_just_pressed: false,
+            mouse_middle_pressed: false,
+            mouse_middle_just_pressed: false,
+            ctrl: false,
+            shift: false,
+            alt: false,
         }
     }
 
@@ -141,19 +161,17 @@ impl<A: App> Runner<A> {
         }
     }
 
+    fn resize_shadow(&mut self, w: f32, h: f32) {
+        let gpu = self.gpu.as_ref().unwrap();
+        if let Some(sr) = self.shadow_renderer.as_mut() {
+            sr.resize(&gpu.device, &gpu.queue, w, h);
+        }
+    }
+
     fn dispatch(&mut self, event: Event) {
         if let Some(action) = self.app.event(event) {
             self.app.update(action);
             self.window().request_redraw();
-        }
-    }
-
-    fn resize_shadow(&mut self, w: f32, h: f32) {
-        let gpu = self.gpu.as_ref().unwrap();
-        let device = &gpu.device;
-        let queue = &gpu.queue;
-        if let Some(sr) = self.shadow_renderer.as_mut() {
-            sr.resize(device, queue, w, h);
         }
     }
 
@@ -168,13 +186,16 @@ impl<A: App> Runner<A> {
 
         let mut tree = self.app.view();
         do_layout(&mut tree, width, height, self.fonts.as_mut().unwrap());
-        let messages = draw(
+
+        let actions = draw(
             &mut tree,
             self.shape_renderer.as_mut().unwrap(),
             self.shadow_renderer.as_mut().unwrap(),
             self.text_renderer.as_mut().unwrap(),
             self.fonts.as_mut().unwrap(),
-            &self.events,
+            self.mouse_x,
+            self.mouse_y,
+            self.mouse_left_just_pressed,
         );
 
         {
@@ -225,10 +246,13 @@ impl<A: App> Runner<A> {
         self.text_renderer.as_mut().unwrap().trim_atlas();
         finisher.present(encoder, &self.gpu().queue);
 
-        // dispatch collected actions to app
-        for action in messages {
+        for action in actions {
             self.app.update(action);
         }
+
+        self.mouse_left_just_pressed = false;
+        self.mouse_right_just_pressed = false;
+        self.mouse_middle_just_pressed = false;
     }
 }
 
@@ -291,54 +315,42 @@ impl<A: App> ApplicationHandler for Runner<A> {
             WindowEvent::CursorMoved { position, .. } => {
                 let x = (position.x / self.scale_factor) as f32;
                 let y = (position.y / self.scale_factor) as f32;
-                self.events.mouse.dx = x - self.events.mouse.x;
-                self.events.mouse.dy = y - self.events.mouse.y;
-                self.events.mouse.x = x;
-                self.events.mouse.y = y;
-                self.dispatch(Event::MouseMoved {
-                    x,
-                    y,
-                    dx: self.events.mouse.dx,
-                    dy: self.events.mouse.dy,
-                });
+                let dx = x - self.mouse_x;
+                let dy = y - self.mouse_y;
+                self.mouse_x = x;
+                self.mouse_y = y;
+                self.dispatch(Event::MouseMoved { x, y, dx, dy });
                 self.window().request_redraw();
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let pressed = state == ElementState::Pressed;
                 let btn = match button {
-                    MouseButton::Left => Some(BentoMouseButton::Left),
-                    MouseButton::Right => Some(BentoMouseButton::Right),
-                    MouseButton::Middle => Some(BentoMouseButton::Middle),
+                    WinitMouseButton::Left => Some(MouseButton::Left),
+                    WinitMouseButton::Right => Some(MouseButton::Right),
+                    WinitMouseButton::Middle => Some(MouseButton::Middle),
                     _ => None,
                 };
                 if let Some(btn) = btn {
                     match btn {
-                        BentoMouseButton::Left => {
-                            self.events.mouse.left_just_pressed =
-                                pressed && !self.events.mouse.left_pressed;
-                            self.events.mouse.left_just_released =
-                                !pressed && self.events.mouse.left_pressed;
-                            self.events.mouse.left_pressed = pressed;
+                        MouseButton::Left => {
+                            self.mouse_left_just_pressed = pressed && !self.mouse_left_pressed;
+                            self.mouse_left_pressed = pressed;
                         }
-                        BentoMouseButton::Right => {
-                            self.events.mouse.right_just_pressed =
-                                pressed && !self.events.mouse.right_pressed;
-                            self.events.mouse.right_just_released =
-                                !pressed && self.events.mouse.right_pressed;
-                            self.events.mouse.right_pressed = pressed;
+                        MouseButton::Right => {
+                            self.mouse_right_just_pressed = pressed && !self.mouse_right_pressed;
+                            self.mouse_right_pressed = pressed;
                         }
-                        BentoMouseButton::Middle => {
-                            self.events.mouse.middle_just_pressed =
-                                pressed && !self.events.mouse.middle_pressed;
-                            self.events.mouse.middle_just_released =
-                                !pressed && self.events.mouse.middle_pressed;
-                            self.events.mouse.middle_pressed = pressed;
+                        MouseButton::Middle => {
+                            self.mouse_middle_just_pressed = pressed && !self.mouse_middle_pressed;
+                            self.mouse_middle_pressed = pressed;
                         }
                     }
+                    let x = self.mouse_x;
+                    let y = self.mouse_y;
                     if pressed {
-                        self.dispatch(Event::MousePressed(btn));
+                        self.dispatch(Event::MousePressed { button: btn, x, y });
                     } else {
-                        self.dispatch(Event::MouseReleased(btn));
+                        self.dispatch(Event::MouseReleased { button: btn, x, y });
                     }
                 }
                 self.window().request_redraw();
@@ -348,32 +360,49 @@ impl<A: App> ApplicationHandler for Runner<A> {
                     MouseScrollDelta::LineDelta(x, y) => (x, y),
                     MouseScrollDelta::PixelDelta(pos) => (pos.x as f32, pos.y as f32),
                 };
-                self.events.mouse.scroll_x = x;
-                self.events.mouse.scroll_y = y;
                 self.dispatch(Event::MouseScrolled { x, y });
                 self.window().request_redraw();
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                if let PhysicalKey::Code(key) = event.physical_key {
-                    let key = crate::key_code_to_key(key);
-                    if event.state == ElementState::Pressed {
-                        self.events.keyboard.pressed.insert(key);
-                        self.events.keyboard.just_pressed.insert(key);
-                        self.dispatch(Event::KeyPressed(key));
+                if let PhysicalKey::Code(key_code) = event.physical_key {
+                    let key = crate::key_code_to_key(key_code);
+                    let pressed = event.state == ElementState::Pressed;
+                    match key {
+                        Key::LControl | Key::RControl => self.ctrl = pressed,
+                        Key::LShift | Key::RShift => self.shift = pressed,
+                        Key::LAlt | Key::RAlt => self.alt = pressed,
+                        _ => {}
+                    }
+                    let (ctrl, shift, alt) = (self.ctrl, self.shift, self.alt);
+                    if pressed {
+                        self.dispatch(Event::KeyPressed {
+                            key,
+                            ctrl,
+                            shift,
+                            alt,
+                        });
                     } else {
-                        self.events.keyboard.pressed.remove(&key);
-                        self.events.keyboard.just_released.insert(key);
-                        self.dispatch(Event::KeyReleased(key));
+                        self.dispatch(Event::KeyReleased {
+                            key,
+                            ctrl,
+                            shift,
+                            alt,
+                        });
                     }
                 }
                 self.window().request_redraw();
             }
             WindowEvent::Focused(focused) => {
-                if focused {
-                    self.dispatch(Event::Focused);
-                } else {
-                    self.dispatch(Event::Unfocused);
+                if !focused {
+                    self.ctrl = false;
+                    self.shift = false;
+                    self.alt = false;
                 }
+                self.dispatch(if focused {
+                    Event::Focused
+                } else {
+                    Event::Unfocused
+                });
                 self.window().request_redraw();
             }
             WindowEvent::Ime(winit::event::Ime::Commit(_)) => {}
@@ -384,7 +413,7 @@ impl<A: App> ApplicationHandler for Runner<A> {
                 let (w, h) = self.logical_size();
                 self.on_resize(w, h);
                 self.resize_shadow(w, h);
-                self.dispatch(Event::ScaleFactorChanged(scale_factor));
+                self.dispatch(Event::ScaleChanged(scale_factor));
                 self.window().request_redraw();
             }
             WindowEvent::Resized(size) => {
@@ -400,7 +429,6 @@ impl<A: App> ApplicationHandler for Runner<A> {
             }
             WindowEvent::RedrawRequested => {
                 self.render();
-                self.events.clear_frame_state();
             }
             WindowEvent::CloseRequested => {
                 self.dispatch(Event::CloseRequested);

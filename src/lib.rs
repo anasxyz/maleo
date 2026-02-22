@@ -26,5 +26,5 @@ mod layout;
 pub use app::{App, Settings};
 pub use color::Color;
 pub use element::*;
-pub use events::{Event, Events, Key, Keyboard, Mouse, MouseButton, key_code_to_key};
+pub use events::{Event, Key, MouseButton, key_code_to_key};
 pub use fonts::{FontBuilder, FontId, Fonts};

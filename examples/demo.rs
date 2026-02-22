@@ -64,9 +64,13 @@ impl App for MyApp {
 
     fn event(&mut self, event: Event) -> Option<Action> {
         match event {
-            Event::KeyPressed(Key::Up) => Some(Action::Increment),
-            Event::KeyPressed(Key::Down) => Some(Action::Decrement),
-            Event::KeyPressed(Key::R) => Some(Action::Reset),
+            Event::KeyPressed {
+                key: Key::Up,
+                ctrl: true,
+                ..
+            } => Some(Action::Increment),
+            Event::KeyPressed { key: Key::Down, .. } => Some(Action::Decrement),
+            Event::KeyPressed { key: Key::R, .. } => Some(Action::Reset),
             _ => None,
         }
     }
@@ -78,16 +82,12 @@ impl App for MyApp {
             Action::Reset => self.count = 0,
         }
     }
-
-    fn fonts(&self, fonts: &mut Fonts) {
-        fonts.add("ui", "Arial", 14.0).default();
-    }
 }
 
 fn main() {
     MyApp::run(
         Settings::default()
-            .title("Counter")
+            .title("demo")
             .width(400)
             .height(400)
             .clear_color(BG),
