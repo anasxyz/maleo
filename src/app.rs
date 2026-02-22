@@ -215,6 +215,7 @@ impl<A: App> Runner<A> {
                     *resolved_h,
                     color.to_array(),
                     style.border_radius,
+                    clip,
                 );
             }
 
@@ -298,6 +299,7 @@ impl<A: App> Runner<A> {
                     *resolved_h,
                     bg.to_array(),
                     style.border_radius,
+                    clip,
                 );
 
                 let fonts = self.fonts.as_mut().unwrap();
@@ -340,6 +342,7 @@ impl<A: App> Runner<A> {
                         *resolved_h,
                         bg.to_array(),
                         style.border_radius,
+                        clip,
                     );
                 }
                 let child_clip = child_clip(
@@ -370,6 +373,7 @@ impl<A: App> Runner<A> {
                         *resolved_h,
                         bg.to_array(),
                         style.border_radius,
+                        clip,
                     );
                 }
                 let child_clip = child_clip(
@@ -427,7 +431,7 @@ fn child_clip(
 
 // taffy helpers
 
-// draw a rect or rounded rect depending on border_radius
+// draw a rect or rounded rect, clipped if a clip rect is provided
 fn draw_shape(
     sr: &mut crate::ShapeRenderer,
     x: f32,
@@ -436,9 +440,18 @@ fn draw_shape(
     h: f32,
     color: [f32; 4],
     border_radius: f32,
+    clip: Option<[f32; 4]>,
 ) {
     if border_radius > 0.0 {
+        if let Some([cx, cy, cx2, cy2]) = clip {
+            if x < cx || y < cy || x + w > cx2 || y + h > cy2 {
+                sr.draw_rect_clipped(x, y, w, h, color, [cx, cy, cx2, cy2]);
+                return;
+            }
+        }
         sr.draw_rounded_rect(x, y, w, h, border_radius, color, [0.0; 4], 0.0);
+    } else if let Some(clip) = clip {
+        sr.draw_rect_clipped(x, y, w, h, color, clip);
     } else {
         sr.draw_rect(x, y, w, h, color, [0.0; 4], 0.0);
     }

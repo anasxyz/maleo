@@ -188,6 +188,21 @@ impl ShapeRenderer {
         self.rect(x, y, w, h, color, outline_color, outline_thickness);
     }
 
+    // draws a rect clipped to [cx, cy, cx2, cy2] bounds
+    pub fn draw_rect_clipped(&mut self, x: f32, y: f32, w: f32, h: f32, color: [f32; 4], clip: [f32; 4]) {
+        let [cx, cy, cx2, cy2] = clip;
+        let x1 = x.max(cx);
+        let y1 = y.max(cy);
+        let x2 = (x + w).min(cx2);
+        let y2 = (y + h).min(cy2);
+        if x2 <= x1 || y2 <= y1 { return; }
+        let p1 = self.to_ndc(x1, y1);
+        let p2 = self.to_ndc(x2, y1);
+        let p3 = self.to_ndc(x1, y2);
+        let p4 = self.to_ndc(x2, y2);
+        self.push_quad(p1, p2, p3, p4, color);
+    }
+
     pub fn circle(&mut self, cx: f32, cy: f32, radius: f32, color: [f32; 4], outline_color: [f32; 4], outline_thickness: f32) {
         const SEGMENTS: usize = 32;
         

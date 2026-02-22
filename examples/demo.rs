@@ -12,18 +12,20 @@ impl App for MyApp {
     fn update(&mut self, events: &Events) -> Element {
         row(vec![
             rect(Color::RED)
-                .width(Val::Percent(100.0))
+                .width(Val::Percent(98.0))
                 .height(Val::Px(100.0))
-                .border_radius(8.0),
+                .shrink(0.0),
             rect(Color::GREEN)
                 .width(Val::Px(100.0))
-                .height(Val::Px(100.0)),
+                .height(Val::Px(100.0))
+                .shrink(0.0),
             rect(Color::BLUE)
                 .width(Val::Px(100.0))
-                .height(Val::Px(100.0)),
+                .height(Val::Px(100.0))
+                .shrink(0.0),
         ])
         .width(Val::Percent(100.0))
-        .gap(16.0)
+        .overflow_hidden()
     }
 }
 
