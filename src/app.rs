@@ -56,10 +56,10 @@ impl Settings {
 // app trait
 
 pub trait App: 'static + Sized {
-    type Message: Clone + 'static;
+    type Action: Clone + 'static;
     fn new() -> Self;
-    fn view(&self, events: &Events) -> Element<Self::Message>;
-    fn update(&mut self, message: Self::Message) {}
+    fn view(&self) -> Element<Self::Action>;
+    fn update(&mut self, action: Self::Action) {}
     fn fonts(&self, fonts: &mut Fonts) {}
     fn run(settings: Settings) {
         run::<Self>(settings);
@@ -155,7 +155,7 @@ impl<A: App> Runner<A> {
         let (mut encoder, finisher, view, msaa_view) = frame.begin();
         let (width, height) = self.logical_size();
 
-        let mut tree = self.app.view(&self.events);
+        let mut tree = self.app.view();
         do_layout(&mut tree, width, height, self.fonts.as_mut().unwrap());
         let messages = draw(
             &mut tree,
@@ -214,9 +214,9 @@ impl<A: App> Runner<A> {
         self.text_renderer.as_mut().unwrap().trim_atlas();
         finisher.present(encoder, &self.gpu().queue);
 
-        // dispatch collected messages to app
-        for msg in messages {
-            self.app.update(msg);
+        // dispatch collected actions to app
+        for action in messages {
+            self.app.update(action);
         }
     }
 }

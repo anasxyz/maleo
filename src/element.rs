@@ -103,7 +103,7 @@ impl Edges {
 // keep padding as an alias for backwards compat and ergonomics
 pub type Padding = Edges;
 
-// margin 
+// margin — each side can be a value or auto
 #[derive(Clone, Copy, Default)]
 pub struct Margin {
     pub top: Option<f32>,
@@ -363,6 +363,7 @@ impl<M: Clone + 'static> Element<M> {
         }
     }
 
+    // on_click — takes an action value, not a closure
     pub fn on_click(mut self, msg: M) -> Self {
         if let Element::Button {
             ref mut on_click, ..

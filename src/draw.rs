@@ -10,7 +10,7 @@ pub fn draw<M: Clone + 'static>(
     fonts: &mut Fonts,
     events: &Events,
 ) -> Vec<M> {
-    let mut messages = Vec::new();
+    let mut actions: Vec<M> = Vec::new();
     draw_clipped(
         element,
         shape_renderer,
@@ -19,9 +19,9 @@ pub fn draw<M: Clone + 'static>(
         fonts,
         events,
         None,
-        &mut messages,
+        &mut actions,
     );
-    messages
+    actions
 }
 
 fn draw_clipped<M: Clone + 'static>(
@@ -32,7 +32,7 @@ fn draw_clipped<M: Clone + 'static>(
     fonts: &mut Fonts,
     events: &Events,
     clip: Option<[f32; 4]>,
-    messages: &mut Vec<M>,
+    actions: &mut Vec<M>,
 ) {
     match element {
         Element::Empty => {}
@@ -195,8 +195,8 @@ fn draw_clipped<M: Clone + 'static>(
             );
 
             if clicked {
-                if let Some(msg) = on_click {
-                    messages.push(msg.clone());
+                if let Some(action) = on_click {
+                    actions.push(action.clone());
                 }
             }
         }
@@ -232,7 +232,7 @@ fn draw_clipped<M: Clone + 'static>(
                 clip,
             );
             for child in children {
-                draw_clipped(child, sr, shadow, tr, fonts, events, child_clip, messages);
+                draw_clipped(child, sr, shadow, tr, fonts, events, child_clip, actions);
             }
         }
 
@@ -267,7 +267,7 @@ fn draw_clipped<M: Clone + 'static>(
                 clip,
             );
             for child in children {
-                draw_clipped(child, sr, shadow, tr, fonts, events, child_clip, messages);
+                draw_clipped(child, sr, shadow, tr, fonts, events, child_clip, actions);
             }
         }
     }
