@@ -14,6 +14,8 @@ pub use render::shape_renderer::ShapeRenderer;
 pub use render::text_renderer::TextRenderer;
 
 mod app;
+mod draw;
+mod layout;
 mod element;
 mod fonts;
 mod events;
