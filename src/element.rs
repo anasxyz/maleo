@@ -103,6 +103,99 @@ impl Edges {
 // keep padding as an alias for backwards compat and ergonomics
 pub type Padding = Edges;
 
+// margin
+// each side can be a value or auto
+#[derive(Clone, Copy, Default)]
+pub struct Margin {
+    pub top: Option<f32>,
+    pub right: Option<f32>,
+    pub bottom: Option<f32>,
+    pub left: Option<f32>,
+}
+
+impl Margin {
+    pub fn all(v: f32) -> Self {
+        Self {
+            top: Some(v),
+            right: Some(v),
+            bottom: Some(v),
+            left: Some(v),
+        }
+    }
+    pub fn auto() -> Self {
+        Self {
+            top: None,
+            right: None,
+            bottom: None,
+            left: None,
+        }
+    }
+    pub fn horizontal_auto() -> Self {
+        Self {
+            top: Some(0.0),
+            right: None,
+            bottom: Some(0.0),
+            left: None,
+        }
+    }
+    pub fn vertical_auto() -> Self {
+        Self {
+            top: None,
+            right: Some(0.0),
+            bottom: None,
+            left: Some(0.0),
+        }
+    }
+    pub fn horizontal(v: f32) -> Self {
+        Self {
+            top: Some(0.0),
+            right: Some(v),
+            bottom: Some(0.0),
+            left: Some(v),
+        }
+    }
+    pub fn vertical(v: f32) -> Self {
+        Self {
+            top: Some(v),
+            right: Some(0.0),
+            bottom: Some(v),
+            left: Some(0.0),
+        }
+    }
+    pub fn top(v: f32) -> Self {
+        Self {
+            top: Some(v),
+            right: Some(0.0),
+            bottom: Some(0.0),
+            left: Some(0.0),
+        }
+    }
+    pub fn bottom(v: f32) -> Self {
+        Self {
+            top: Some(0.0),
+            right: Some(0.0),
+            bottom: Some(v),
+            left: Some(0.0),
+        }
+    }
+    pub fn left(v: f32) -> Self {
+        Self {
+            top: Some(0.0),
+            right: Some(0.0),
+            bottom: Some(0.0),
+            left: Some(v),
+        }
+    }
+    pub fn right(v: f32) -> Self {
+        Self {
+            top: Some(0.0),
+            right: Some(v),
+            bottom: Some(0.0),
+            left: Some(0.0),
+        }
+    }
+}
+
 // position
 
 #[derive(Clone, Copy, PartialEq, Default)]
@@ -155,8 +248,8 @@ pub struct Style {
     pub align_self: Option<Align>,
 
     // spacing
-    pub padding: Edges,
-    pub margin: Edges,
+    pub padding: Padding,
+    pub margin: Margin,
     pub gap: f32,
 
     // position
@@ -196,7 +289,7 @@ impl Default for Style {
             align_y: Align::Start,
             align_self: None,
             padding: Edges::default(),
-            margin: Edges::default(),
+            margin: Margin::default(),
             gap: 0.0,
             position: Position::Relative,
             inset: Edges::default(),
@@ -372,7 +465,7 @@ impl Element {
         }
         self
     }
-    pub fn margin(mut self, e: Edges) -> Self {
+    pub fn margin(mut self, e: Margin) -> Self {
         if let Some(s) = self.style_mut() {
             s.margin = e;
         }

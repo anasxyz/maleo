@@ -5,13 +5,15 @@ use crate::{Align, Element, Fonts, Overflow, Position, Val};
 pub fn do_layout(element: &mut Element, width: f32, height: f32, fonts: &mut Fonts) {
     let mut taffy: TaffyTree<()> = TaffyTree::new();
     let root = build_taffy_node(&mut taffy, element, fonts);
-    taffy.compute_layout(
-        root,
-        taffy::geometry::Size {
-            width: AvailableSpace::Definite(width),
-            height: AvailableSpace::Definite(height),
-        },
-    ).unwrap();
+    taffy
+        .compute_layout(
+            root,
+            taffy::geometry::Size {
+                width: AvailableSpace::Definite(width),
+                height: AvailableSpace::Definite(height),
+            },
+        )
+        .unwrap();
     apply_layout(&taffy, element, root, 0.0, 0.0);
 }
 
@@ -19,23 +21,31 @@ fn build_taffy_node(taffy: &mut TaffyTree<()>, element: &Element, fonts: &mut Fo
     match element {
         Element::Empty => taffy.new_leaf(taffy::Style::default()).unwrap(),
 
-        Element::Text { content, font, font_size, style, .. } => {
+        Element::Text {
+            content,
+            font,
+            font_size,
+            style,
+            ..
+        } => {
             let font_id = fonts.resolve(font.as_deref()).unwrap();
             let (w, h) = match font_size {
                 Some(size) => fonts.measure_sized(content, font_id, *size),
                 None => fonts.measure(content, font_id),
             };
-            taffy.new_leaf(taffy::Style {
-                size: taffy::geometry::Size {
-                    width: Dimension::Length(w),
-                    height: Dimension::Length(h),
-                },
-                margin: edges_to_rect_lpa(&style.margin),
-                flex_grow: style.grow,
-                flex_shrink: 1.0,
-                align_self: style.align_self.and_then(align_to_self),
-                ..Default::default()
-            }).unwrap()
+            taffy
+                .new_leaf(taffy::Style {
+                    size: taffy::geometry::Size {
+                        width: Dimension::Length(w),
+                        height: Dimension::Length(h),
+                    },
+                    margin: margin_to_rect_lpa(&style.margin),
+                    flex_grow: style.grow,
+                    flex_shrink: 1.0,
+                    align_self: style.align_self.and_then(align_to_self),
+                    ..Default::default()
+                })
+                .unwrap()
         }
 
         Element::Rect { style, .. } => {
@@ -50,26 +60,30 @@ fn build_taffy_node(taffy: &mut TaffyTree<()>, element: &Element, fonts: &mut Fo
             let (tw, th) = fonts.measure(label, font_id);
             let natural_w = tw + 24.0;
             let natural_h = th + 12.0;
-            taffy.new_leaf(taffy::Style {
-                size: taffy::geometry::Size {
-                    width: match &style.width {
-                        Val::Auto => Dimension::Length(natural_w),
-                        other => val_to_dimension(other),
+            taffy
+                .new_leaf(taffy::Style {
+                    size: taffy::geometry::Size {
+                        width: match &style.width {
+                            Val::Auto => Dimension::Length(natural_w),
+                            other => val_to_dimension(other),
+                        },
+                        height: match &style.height {
+                            Val::Auto => Dimension::Length(natural_h),
+                            other => val_to_dimension(other),
+                        },
                     },
-                    height: match &style.height {
-                        Val::Auto => Dimension::Length(natural_h),
-                        other => val_to_dimension(other),
-                    },
-                },
-                margin: edges_to_rect_lpa(&style.margin),
-                flex_grow: style.grow,
-                flex_shrink: 1.0,
-                align_self: style.align_self.and_then(align_to_self),
-                ..Default::default()
-            }).unwrap()
+                    margin: margin_to_rect_lpa(&style.margin),
+                    flex_grow: style.grow,
+                    flex_shrink: 1.0,
+                    align_self: style.align_self.and_then(align_to_self),
+                    ..Default::default()
+                })
+                .unwrap()
         }
 
-        Element::Row { style, children, .. } => {
+        Element::Row {
+            style, children, ..
+        } => {
             let child_nodes: Vec<NodeId> = children
                 .iter()
                 .map(|c| build_taffy_node(taffy, c, fonts))
@@ -80,7 +94,9 @@ fn build_taffy_node(taffy: &mut TaffyTree<()>, element: &Element, fonts: &mut Fo
             taffy.new_with_children(ts, &child_nodes).unwrap()
         }
 
-        Element::Column { style, children, .. } => {
+        Element::Column {
+            style, children, ..
+        } => {
             let child_nodes: Vec<NodeId> = children
                 .iter()
                 .map(|c| build_taffy_node(taffy, c, fonts))
@@ -93,7 +109,13 @@ fn build_taffy_node(taffy: &mut TaffyTree<()>, element: &Element, fonts: &mut Fo
     }
 }
 
-fn apply_layout(taffy: &TaffyTree<()>, element: &mut Element, node: NodeId, parent_x: f32, parent_y: f32) {
+fn apply_layout(
+    taffy: &TaffyTree<()>,
+    element: &mut Element,
+    node: NodeId,
+    parent_x: f32,
+    parent_y: f32,
+) {
     let layout = taffy.layout(node).unwrap();
     let x = parent_x + layout.location.x;
     let y = parent_y + layout.location.y;
@@ -102,22 +124,58 @@ fn apply_layout(taffy: &TaffyTree<()>, element: &mut Element, node: NodeId, pare
 
     match element {
         Element::Empty => {}
-        Element::Text { style, .. } => { style.x = x; style.y = y; }
-        Element::Rect { style, resolved_w, resolved_h, .. } => {
-            style.x = x; style.y = y; *resolved_w = w; *resolved_h = h;
+        Element::Text { style, .. } => {
+            style.x = x;
+            style.y = y;
         }
-        Element::Button { resolved_x, resolved_y, resolved_w, resolved_h, .. } => {
-            *resolved_x = x; *resolved_y = y; *resolved_w = w; *resolved_h = h;
+        Element::Rect {
+            style,
+            resolved_w,
+            resolved_h,
+            ..
+        } => {
+            style.x = x;
+            style.y = y;
+            *resolved_w = w;
+            *resolved_h = h;
         }
-        Element::Row { style, children, resolved_w, resolved_h } => {
-            style.x = x; style.y = y; *resolved_w = w; *resolved_h = h;
+        Element::Button {
+            resolved_x,
+            resolved_y,
+            resolved_w,
+            resolved_h,
+            ..
+        } => {
+            *resolved_x = x;
+            *resolved_y = y;
+            *resolved_w = w;
+            *resolved_h = h;
+        }
+        Element::Row {
+            style,
+            children,
+            resolved_w,
+            resolved_h,
+        } => {
+            style.x = x;
+            style.y = y;
+            *resolved_w = w;
+            *resolved_h = h;
             let child_nodes = taffy.children(node).unwrap();
             for (child, child_node) in children.iter_mut().zip(child_nodes.iter()) {
                 apply_layout(taffy, child, *child_node, x, y);
             }
         }
-        Element::Column { style, children, resolved_w, resolved_h } => {
-            style.x = x; style.y = y; *resolved_w = w; *resolved_h = h;
+        Element::Column {
+            style,
+            children,
+            resolved_w,
+            resolved_h,
+        } => {
+            style.x = x;
+            style.y = y;
+            *resolved_w = w;
+            *resolved_h = h;
             let child_nodes = taffy.children(node).unwrap();
             for (child, child_node) in children.iter_mut().zip(child_nodes.iter()) {
                 apply_layout(taffy, child, *child_node, x, y);
@@ -143,12 +201,18 @@ fn edges_to_rect_lp(e: &crate::Edges) -> Rect<LengthPercentage> {
     }
 }
 
-fn edges_to_rect_lpa(e: &crate::Edges) -> Rect<LengthPercentageAuto> {
+fn margin_to_rect_lpa(m: &crate::Margin) -> Rect<LengthPercentageAuto> {
+    fn side(v: Option<f32>) -> LengthPercentageAuto {
+        match v {
+            Some(v) => LengthPercentageAuto::Length(v),
+            None => LengthPercentageAuto::Auto,
+        }
+    }
     Rect {
-        left: LengthPercentageAuto::Length(e.left),
-        right: LengthPercentageAuto::Length(e.right),
-        top: LengthPercentageAuto::Length(e.top),
-        bottom: LengthPercentageAuto::Length(e.bottom),
+        left: side(m.left),
+        right: side(m.right),
+        top: side(m.top),
+        bottom: side(m.bottom),
     }
 }
 
@@ -194,7 +258,11 @@ fn style_to_taffy(style: &crate::Style, flex_direction: FlexDirection) -> taffy:
     taffy::Style {
         display: Display::Flex,
         flex_direction,
-        flex_wrap: if style.wrap { FlexWrap::Wrap } else { FlexWrap::NoWrap },
+        flex_wrap: if style.wrap {
+            FlexWrap::Wrap
+        } else {
+            FlexWrap::NoWrap
+        },
         position: match style.position {
             Position::Relative => taffy::style::Position::Relative,
             Position::Absolute => taffy::style::Position::Absolute,
@@ -222,7 +290,7 @@ fn style_to_taffy(style: &crate::Style, flex_direction: FlexDirection) -> taffy:
         flex_shrink: style.shrink.unwrap_or(1.0),
         flex_basis: val_to_dimension(&style.basis),
         padding: edges_to_rect_lp(&style.padding),
-        margin: edges_to_rect_lpa(&style.margin),
+        margin: margin_to_rect_lpa(&style.margin),
         gap: taffy::geometry::Size {
             width: LengthPercentage::Length(style.gap),
             height: LengthPercentage::Length(style.gap),
