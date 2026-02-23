@@ -71,9 +71,8 @@ impl<M: Clone + 'static> TextInput<M> {
             ctx.mouse.x >= x && ctx.mouse.x <= x + w && ctx.mouse.y >= y && ctx.mouse.y <= y + h;
 
         if ctx.mouse.left_just_pressed {
-            ctx.state
-                .get_or_default_mut::<TextInputState>(&self.id)
-                .focused = hovered;
+            let state = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
+            state.focused = hovered;
         }
         {
             let s = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
@@ -178,6 +177,58 @@ impl<M: Clone + 'static> TextInput<M> {
             .get_or_default::<TextInputState>(&self.id)
             .scroll_offset;
         let scroll_snapped = (scroll * s).floor() / s;
+
+        // click to position cursor
+        // binary search over char boundaries
+        if ctx.mouse.left_just_pressed && hovered && !value_str.is_empty() {
+            let click_x = ctx.mouse.x - text_origin_x + scroll;
+            // collect char boundaries
+            // o(n) byte scan, no font calls
+            let boundaries: Vec<usize> = value_str
+                .char_indices()
+                .map(|(i, _)| i)
+                .chain(std::iter::once(value_str.len()))
+                .collect();
+            // binary search
+            // o(log n) font measurements
+            let mut lo = 0usize;
+            let mut hi = boundaries.len() - 1;
+            while hi - lo > 1 {
+                let mid = (lo + hi) / 2;
+                let (measured, _) = ctx.fonts.measure_sized(
+                    &value_str[..boundaries[mid]],
+                    font_id,
+                    size,
+                    self.font_weight,
+                );
+                if measured <= click_x {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
+            }
+            // pick closer of the two final candidates
+            let (lo_w, _) = ctx.fonts.measure_sized(
+                &value_str[..boundaries[lo]],
+                font_id,
+                size,
+                self.font_weight,
+            );
+            let (hi_w, _) = ctx.fonts.measure_sized(
+                &value_str[..boundaries[hi]],
+                font_id,
+                size,
+                self.font_weight,
+            );
+            let best = if (lo_w - click_x).abs() <= (hi_w - click_x).abs() {
+                boundaries[lo]
+            } else {
+                boundaries[hi]
+            };
+            ctx.state
+                .get_or_default_mut::<TextInputState>(&self.id)
+                .cursor = best;
+        }
 
         if value_str.is_empty() {
             let col = self

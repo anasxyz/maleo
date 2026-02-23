@@ -32,7 +32,7 @@ impl App for MyApp {
                 .on_change(|v| Action::UpdateAddress(v))
                 .placeholder("Enter address")
                 .font("mono")
-                .font_size(12.0)
+                .font_size(24.0)
                 .font_weight(500)
                 .border(Color::hex("#000000"), 0.0)
                 .border_radius(15.0)
