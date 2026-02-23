@@ -392,9 +392,11 @@ fn draw_background<M: Clone + 'static>(
         .background
         .unwrap_or(Color::new(0.13, 0.13, 0.17, 1.0));
     let bg = if focused {
-        bg.lighten(0.05)
+        bg
+        // bg.lighten(0.05)
     } else if hovered {
-        bg.lighten(0.03)
+        bg
+        // bg.lighten(0.03)
     } else {
         bg
     };
@@ -410,9 +412,11 @@ fn draw_background<M: Clone + 'static>(
         (col, 1.5)
     };
     let border_col = if focused {
-        border_col.lighten(0.05)
+        border_col
+        // border_col.lighten(0.05)
     } else if hovered {
-        border_col.lighten(0.03)
+        border_col
+        // border_col.lighten(0.03)
     } else {
         border_col
     };

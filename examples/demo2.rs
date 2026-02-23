@@ -55,7 +55,9 @@ impl App for MyApp {
                     .on_click(Action::Cancel)
                     .background(Color::hex("#374151"))
                     .border_radius(6.0),
-            ]),
+            ])
+            .width(percent(100.0))
+            .align_x(Align::Center)
         ])
         .padding(Edges::all(32.0))
         .width(percent(100.0))
