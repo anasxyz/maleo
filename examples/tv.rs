@@ -75,7 +75,7 @@ impl App for MyApp {
                 .on_change(|v| Action::UpdateNotes(v))
                 .placeholder("Start writing...\n\nSupports:\n  • Multiple lines\n  • Up/Down arrows\n  • Click to place cursor\n  • Click and drag to select\n  • Double-click selects word\n  • Triple-click selects line")
                 .font("mono")
-                .font_size(24.0)
+                .font_size(12.0)
                 .width(percent(100.0))
                 .height(px(240.0))
                 .padding(Edges::all(10.0))

@@ -446,7 +446,7 @@ fn draw_background<M: Clone + 'static>(
     );
 }
 
-/// returns (line_index, byte_offset_within_line) for a given overall byte offset
+/// Returns (line_index, byte_offset_within_line) for a given overall byte offset.
 fn offset_to_line_col(lines: &[&str], offset: usize) -> (usize, usize) {
     let mut remaining = offset;
     for (i, line) in lines.iter().enumerate() {
@@ -462,7 +462,7 @@ fn offset_to_line_col(lines: &[&str], offset: usize) -> (usize, usize) {
     )
 }
 
-/// convert (line_index, col_byte_offset) back to overall byte offset.
+/// Convert (line_index, col_byte_offset) back to overall byte offset.
 fn line_col_to_offset(lines: &[&str], line: usize, col: usize) -> usize {
     let mut off = 0;
     for (i, l) in lines.iter().enumerate() {
@@ -702,18 +702,25 @@ fn draw_selection<M: Clone + 'static>(
             .fonts
             .measure_sized(&line[..col_end], font_id, size, weight);
 
-        // for lines beyond the last selected line, extend to edge
         let sx = (text_origin_x + sx_rel).max(left_edge);
         let ex = if li < end_line {
-            // extend to end of content area (including trailing newline visual space)
             right_edge
         } else {
             (text_origin_x + ex_rel).min(right_edge)
         };
 
-        if ex > sx {
+        // Clamp rect vertically to clip region
+        let (ry, rh) = if let Some([_, cy, _, cy2]) = clip {
+            let clamped_top = line_y.max(cy);
+            let clamped_bot = (line_y + lh).min(cy2);
+            (clamped_top, clamped_bot - clamped_top)
+        } else {
+            (line_y, lh)
+        };
+
+        if ex > sx && rh > 0.0 {
             ctx.sr
-                .draw_rect(sx, line_y, ex - sx, lh, sel_col, [0.0; 4], 0.0);
+                .draw_rect(sx, ry, ex - sx, rh, sel_col, [0.0; 4], 0.0);
         }
     }
 }
@@ -844,6 +851,8 @@ fn draw_cursor<M: Clone + 'static>(
         0.0,
     );
 }
+
+// ─── text helpers ─────────────────────────────────────────────────────────────
 
 fn clamp_to_char_boundary(s: &str, mut pos: usize) -> usize {
     pos = pos.min(s.len());
