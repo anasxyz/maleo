@@ -83,16 +83,16 @@ impl Fonts {
         }
     }
 
-    // Measure at the font's default size and weight 400.
-    // Used by widgets (button, text) that don't vary weight at measure time.
+    // measure at the font's default size and weight 400
+    // used by widgets (button, text) that don't vary weight at measure time
     pub fn measure(&mut self, text: &str, id: FontId) -> (f32, f32) {
         let size = self.entries[id.0].size;
         self.measure_sized(text, id, size, 400)
     }
 
-    // Measure at an explicit size and weight.
-    // Weight must match the weight used when actually rendering the text,
-    // otherwise the cursor / layout will be off for non-400 weights.
+    // measure at an explicit size and weight
+    // weight must match the weight used when actually rendering the text,
+    // otherwise the cursor / layout will be off for non 400 weights
     pub fn measure_sized(&mut self, text: &str, id: FontId, size: f32, weight: u16) -> (f32, f32) {
         let key = (id.0, text.to_string(), (size * 10.0) as u32, weight);
         if let Some(&cached) = self.measure_cache.get(&key) {
