@@ -5,13 +5,13 @@ use bento::*;
 #[derive(Clone)]
 enum Action {
     UpdateNotes(String),
-    UpdateTitle(String),
-    Clear,
+    SelectTab(usize),
 }
 
 struct MyApp {
-    title: String,
     notes: String,
+    selected: usize,
+    files: Vec<&'static str>,
 }
 
 impl App for MyApp {
@@ -19,119 +19,116 @@ impl App for MyApp {
 
     fn new() -> Self {
         Self {
-            title: String::new(),
             notes: String::new(),
+            selected: 0,
+            files: vec!["main.rs", "lib.rs", "config.toml", "README.md"],
         }
     }
 
     fn view(&self) -> Element<Action> {
-        let word_count = self.notes
-            .split_whitespace()
-            .count();
+        let bg          = Color::hex("#0f111a");
+        let sidebar_bg  = Color::hex("#0b0d14");
+        let active_bg   = Color::hex("#1a1d2e");
+        let divider     = Color::hex("#1a1d2e");
+        let text_dim    = Color::hex("#3e4260");
+        let text_mid    = Color::hex("#6b7094");
+        let text_bright = Color::hex("#c8cce8");
 
-        let line_count = if self.notes.is_empty() {
-            0
-        } else {
-            self.notes.lines().count()
-        };
-
-        column(vec![
-            // Header
-            text("Notes", Color::hex("#ffffff"))
-                .font_size(22.0)
-                .font_weight(700)
-                .margin(Margin::bottom(4.0)),
-
-            text("A simple text editor widget demo.", Color::hex("#888899"))
-                .font_size(13.0)
-                .margin(Margin::bottom(24.0)),
-
-            // Title field (single-line TextInput for comparison)
-            text("Title", Color::hex("#aaaacc"))
-                .font_size(12.0)
-                .font_weight(600)
-                .margin(Margin::bottom(6.0)),
-
-            text_input("title")
-                .value(&self.title)
-                .on_change(|v| Action::UpdateTitle(v))
-                .placeholder("Untitled note...")
+        // ── sidebar ──────────────────────────────────────────────────────────
+        let file_items: Vec<Element<Action>> = self.files
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let active = i == self.selected;
+                row(vec![
+                    text(if active { "▸ " } else { "  " }, text_dim)
+                        .font_size(11.0),
+                    text(*name, if active { text_bright } else { text_mid })
+                        .font_size(12.0)
+                        .grow(1.0),
+                ])
                 .width(percent(100.0))
-                .padding(Edges::all(10.0))
-                .background(Color::hex("#1a1a24"))
-                .text_color(Color::hex("#eeeeff"))
-                .border(Color::hex("#3a3a55"), 1.5)
-                .border_radius(6.0)
-                .margin(Margin::bottom(16.0)),
+                .align_y(Align::Center)
+                .padding(Edges { top: 5.0, bottom: 5.0, left: 10.0, right: 8.0 })
+                .background(if active { active_bg } else { sidebar_bg })
+                .on_click(Action::SelectTab(i))
+            })
+            .collect();
 
-            // Body field (multiline TextEditor)
-            text("Body", Color::hex("#aaaacc"))
-                .font_size(12.0)
+        let sidebar = column(vec![
+            text("EXPLORER", text_dim)
+                .font_size(10.0)
                 .font_weight(600)
-                .margin(Margin::bottom(6.0)),
+                .margin(Margin { top: Some(14.0), bottom: Some(8.0), left: Some(14.0), right: Some(0.0) }),
+            column(file_items)
+                .width(percent(100.0)),
+        ])
+        .width(px(170.0))
+        .height(percent(100.0))
+        .background(sidebar_bg);
 
-            text_editor("notes")
+        // ── editor ───────────────────────────────────────────────────────────
+        let active_name = self.files[self.selected];
+
+        let tab = row(vec![
+            text(active_name, text_mid)
+                .font_size(12.0)
+                .margin(Margin::left(16.0)),
+        ])
+        .width(percent(100.0))
+        .height(px(30.0))
+        .align_y(Align::Center)
+        .background(Color::hex("#0d0f1a"));
+
+        let editor = column(vec![
+            tab,
+            // 1px line under tab
+            rect(divider).width(percent(100.0)).height(px(1.0)),
+            text_editor("body")
                 .value(&self.notes)
                 .on_change(|v| Action::UpdateNotes(v))
-                .placeholder("Start writing...\n\nSupports:\n  • Multiple lines\n  • Up/Down arrows\n  • Click to place cursor\n  • Click and drag to select\n  • Double-click selects word\n  • Triple-click selects line")
+                .placeholder("// start typing...")
                 .font("mono")
-                .font_size(12.0)
+                .font_size(18.0)
+                .grow(1.0)
                 .width(percent(100.0))
-                .height(px(240.0))
-                .padding(Edges::all(10.0))
-                .background(Color::hex("#1a1a24"))
-                .text_color(Color::hex("#eeeeff"))
-                .border(Color::hex("#3a3a55"), 1.5)
-                .border_radius(6.0)
-                .margin(Margin::bottom(12.0)),
-
-            // Stats row
-            row(vec![
-                text(
-                    &format!("{} lines  ·  {} words", line_count, word_count),
-                    Color::hex("#666677"),
-                )
-                .font_size(12.0)
-                .grow(1.0),
-
-                button("Clear")
-                    .on_click(Action::Clear)
-                    .background(Color::hex("#2a1a1a"))
-                    .border(Color::hex("#553333"), 1.0)
-                    .border_radius(5.0)
-                    .text_color(Color::hex("#cc6666")),
-            ])
-            .width(percent(100.0))
-            .align_y(Align::Center)
-            .margin(Margin::bottom(20.0)),
+                .padding(Edges { top: 12.0, bottom: 12.0, left: 16.0, right: 16.0 })
+                .background(bg)
+                .text_color(text_bright)
+                .border(divider, 0.0),
         ])
-        .padding(Edges::all(32.0))
+        .grow(1.0)
+        .height(percent(100.0));
+
+        // ── root ─────────────────────────────────────────────────────────────
+        row(vec![
+            sidebar,
+            rect(divider).width(px(1.0)).height(percent(100.0)),
+            editor,
+        ])
         .width(percent(100.0))
         .height(percent(100.0))
     }
 
     fn update(&mut self, action: Action) -> Vec<Task<Action>> {
         match action {
-            Action::UpdateTitle(v) => self.title = v,
             Action::UpdateNotes(v) => self.notes = v,
-            Action::Clear => {
-                self.title.clear();
-                self.notes.clear();
-            }
+            Action::SelectTab(i)  => self.selected = i,
         }
         vec![]
     }
 
     fn fonts(&self, fonts: &mut Fonts) {
-        fonts.add("mono", "JetBrainsMono Nerd Font Mono", 24.0);
+        fonts.add("mono", "JetBrainsMono Nerd Font Mono", 13.0).default();
     }
 }
 
 fn main() {
     MyApp::run(
         Settings::default()
-            .title("Text Editor Demo")
-            .width(580)
-            .height(560),
+            .title("demo")
+            .width(800)
+            .height(550)
+            .clear_color(Color::hex("#0f111a")),
     );
 }

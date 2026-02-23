@@ -703,10 +703,13 @@ fn draw_selection<M: Clone + 'static>(
             .measure_sized(&line[..col_end], font_id, size, weight);
 
         let sx = (text_origin_x + sx_rel).max(left_edge);
-        let ex = if li < end_line {
-            right_edge
+        let ex = (text_origin_x + ex_rel).min(right_edge);
+        // Empty lines in the middle of a selection get a small fixed-width highlight
+        // so they're visibly included in the selection.
+        let ex = if ex <= sx && li < end_line {
+            sx + 8.0
         } else {
-            (text_origin_x + ex_rel).min(right_edge)
+            ex
         };
 
         // Clamp rect vertically to clip region
@@ -844,7 +847,7 @@ fn draw_cursor<M: Clone + 'static>(
     ctx.sr.draw_rect(
         cursor_x,
         cursor_y,
-        1.0,
+        2.0,
         cursor_h,
         with_opacity(col_val.to_array(), opacity),
         [0.0; 4],
