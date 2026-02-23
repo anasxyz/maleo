@@ -215,11 +215,12 @@ impl<M: Clone + 'static> TextInput<M> {
                 .style
                 .text_color
                 .unwrap_or(Color::new(0.7, 0.75, 1.0, 1.0));
-            let cursor_draw_x = text_origin_x + cursor_x_snapped - scroll_snapped;
+            let cursor_draw_x =
+                ((text_origin_x + cursor_x_snapped - scroll_snapped) * s).floor() / s;
             let cursor_draw_y = (ty * s).floor() / s;
-            let cursor_h = th.ceil();
+            let cursor_h = (th * s).ceil() / s;
+            let cursor_w = 1.0;
             if cursor_draw_x >= x + pad_l && cursor_draw_x <= x + w - pad_r {
-                let cursor_w = 2.0 / s;
                 ctx.sr.draw_rect(
                     cursor_draw_x,
                     cursor_draw_y,

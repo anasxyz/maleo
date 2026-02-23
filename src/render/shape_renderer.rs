@@ -219,8 +219,6 @@ impl ShapeRenderer {
         );
     }
 
-    // internal push helpers
-
     #[inline(always)]
     fn push(
         &mut self,

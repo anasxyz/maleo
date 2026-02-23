@@ -26,15 +26,15 @@ impl App for MyApp {
         column(vec![
             text("Billing address:", Color::hex("#1f282d"))
                 .font_size(12.0)
-                .font_weight(600),
+                .font_weight(500),
             text_input("address")
                 .value(&self.address)
                 .on_change(|v| Action::UpdateAddress(v))
                 .placeholder("Enter address")
-                .font_size(24.0)
-                .font_weight(600)
-                .border(Color::hex("#000000"), 2.0)
-                .border_radius(20.0)
+                .font_size(12.0)
+                .font_weight(500)
+                .border(Color::hex("#000000"), 1.0)
+                .border_radius(1.0)
                 .margin(Margin::top(3.0))
                 .background(Color::hex("#ffffff"))
                 .text_color(Color::hex("#000000"))
