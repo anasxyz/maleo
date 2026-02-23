@@ -1,4 +1,4 @@
-use bento::{Align, App, Color, Edges, Element, Settings, Task, Val, button, column, text};
+use bento::*;
 
 struct Counter {
     count: i32,
@@ -33,8 +33,8 @@ impl App for Counter {
         ])
         .gap(16.0)
         .background(Color::hex("#eeeeee"))
-        .width(Val::Percent(100.0))
-        .height(Val::Percent(100.0))
+        .width(percent(100.0))
+        .height(percent(100.0))
     }
 }
 

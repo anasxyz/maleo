@@ -33,6 +33,16 @@ pub enum Val {
     Percent(f32),
 }
 
+pub fn px(v: f32) -> Val {
+    Val::Px(v)
+}
+pub fn percent(v: f32) -> Val {
+    Val::Percent(v)
+}
+pub fn auto() -> Val {
+    Val::Auto
+}
+
 // edges — used for padding, margin, inset, etc
 
 #[derive(Clone, Copy, Default)]
