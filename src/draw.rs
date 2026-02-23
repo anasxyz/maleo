@@ -12,6 +12,9 @@ pub struct MouseState {
     pub right_just_pressed: bool,
     pub middle_pressed: bool,
     pub middle_just_pressed: bool,
+    pub left_click_count: u32, // 1 = single, 2 = double, 3 = triple
+    pub left_click_x: f32,
+    pub left_click_y: f32,
 }
 
 // everything a widget needs to draw itself

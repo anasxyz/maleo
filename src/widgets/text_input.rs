@@ -12,6 +12,8 @@ pub struct TextInputState {
     pub focused: bool,
     pub cursor: usize,
     pub scroll_offset: f32,
+    pub selection_anchor: Option<usize>,
+    pub dragging: bool,
 }
 
 pub(crate) struct TextInputCallback<M>(pub Box<dyn Fn(String) -> M>);
@@ -73,6 +75,13 @@ impl<M: Clone + 'static> TextInput<M> {
         if ctx.mouse.left_just_pressed {
             let state = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
             state.focused = hovered;
+            state.selection_anchor = None;
+            state.dragging = hovered;
+        }
+        if !ctx.mouse.left_pressed {
+            ctx.state
+                .get_or_default_mut::<TextInputState>(&self.id)
+                .dragging = false;
         }
         {
             let s = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
@@ -80,6 +89,7 @@ impl<M: Clone + 'static> TextInput<M> {
         }
         let focused = ctx.state.get_or_default::<TextInputState>(&self.id).focused;
 
+        // background
         let default_bg = Color::new(0.13, 0.13, 0.17, 1.0);
         let bg = self.style.background.unwrap_or(default_bg);
         let bg = if focused {
@@ -90,6 +100,7 @@ impl<M: Clone + 'static> TextInput<M> {
             bg
         };
 
+        // border
         let (border_col, border_w) = if let Some(col) = self.style.border_color {
             (col, self.style.border_thickness)
         } else {
@@ -123,6 +134,7 @@ impl<M: Clone + 'static> TextInput<M> {
             border_w,
         );
 
+        // font metrics
         let font_id = self
             .font
             .as_deref()
@@ -155,6 +167,7 @@ impl<M: Clone + 'static> TextInput<M> {
         let s = ctx.scale_factor;
         let text_origin_x = ((x + pad_l) * s).floor() / s;
 
+        // cursor position and scroll
         let cursor_pos = ctx.state.get_or_default::<TextInputState>(&self.id).cursor;
         let (cursor_x_abs, _) =
             ctx.fonts
@@ -178,58 +191,104 @@ impl<M: Clone + 'static> TextInput<M> {
             .scroll_offset;
         let scroll_snapped = (scroll * s).floor() / s;
 
-        // click to position cursor
-        // binary search over char boundaries
-        if ctx.mouse.left_just_pressed && hovered && !value_str.is_empty() {
+        // click / drag / double-click / triple-click
+        let dragging = ctx
+            .state
+            .get_or_default::<TextInputState>(&self.id)
+            .dragging;
+        if ctx.mouse.left_just_pressed && hovered {
             let click_x = ctx.mouse.x - text_origin_x + scroll;
-            // collect char boundaries
-            // o(n) byte scan, no font calls
-            let boundaries: Vec<usize> = value_str
-                .char_indices()
-                .map(|(i, _)| i)
-                .chain(std::iter::once(value_str.len()))
-                .collect();
-            // binary search
-            // o(log n) font measurements
-            let mut lo = 0usize;
-            let mut hi = boundaries.len() - 1;
-            while hi - lo > 1 {
-                let mid = (lo + hi) / 2;
-                let (measured, _) = ctx.fonts.measure_sized(
-                    &value_str[..boundaries[mid]],
+            let hit = hit_test_cursor(
+                value_str,
+                click_x,
+                ctx.fonts,
+                font_id,
+                size,
+                self.font_weight,
+            );
+            let state = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
+            match ctx.mouse.left_click_count {
+                2 => {
+                    let ws = word_start(value_str, hit);
+                    let we = word_end(value_str, hit);
+                    if ws < we {
+                        state.selection_anchor = Some(ws);
+                        state.cursor = we;
+                    } else {
+                        state.cursor = hit;
+                        state.selection_anchor = None;
+                    }
+                }
+                3 => {
+                    state.selection_anchor = Some(0);
+                    state.cursor = value_str.len();
+                }
+                _ => {
+                    state.cursor = hit;
+                    state.selection_anchor = None;
+                }
+            }
+        } else if dragging && ctx.mouse.left_pressed {
+            let click_x = ctx.mouse.x - text_origin_x + scroll;
+            let hit = hit_test_cursor(
+                value_str,
+                click_x,
+                ctx.fonts,
+                font_id,
+                size,
+                self.font_weight,
+            );
+            let state = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
+            if hit != state.cursor {
+                if state.selection_anchor.is_none() {
+                    state.selection_anchor = Some(state.cursor);
+                }
+                state.cursor = hit;
+            }
+        }
+
+        // re-read after click/drag may have mutated state this frame
+        let cursor_pos = ctx.state.get_or_default::<TextInputState>(&self.id).cursor;
+        let (cursor_x_abs, _) =
+            ctx.fonts
+                .measure_sized(&value_str[..cursor_pos], font_id, size, self.font_weight);
+        let cursor_x_snapped = (cursor_x_abs * s).floor() / s;
+
+        // selection highlight
+        let selection_anchor = ctx
+            .state
+            .get_or_default::<TextInputState>(&self.id)
+            .selection_anchor;
+        if let Some(anchor) = selection_anchor {
+            if anchor != cursor_pos && focused {
+                let sel_start = anchor.min(cursor_pos);
+                let sel_end = anchor.max(cursor_pos);
+                let (sel_start_x, _) = ctx.fonts.measure_sized(
+                    &value_str[..sel_start],
                     font_id,
                     size,
                     self.font_weight,
                 );
-                if measured <= click_x {
-                    lo = mid;
-                } else {
-                    hi = mid;
+                let (sel_end_x, _) =
+                    ctx.fonts
+                        .measure_sized(&value_str[..sel_end], font_id, size, self.font_weight);
+                let sx = (text_origin_x + sel_start_x - scroll_snapped).max(x + pad_l);
+                let ex = (text_origin_x + sel_end_x - scroll_snapped).min(x + w - pad_r);
+                if ex > sx {
+                    ctx.sr.draw_rect(
+                        sx,
+                        (ty * s).floor() / s,
+                        ex - sx,
+                        (th * s).ceil() / s,
+                        with_opacity([0.3, 0.5, 0.9, 0.4], self.style.opacity),
+                        [0.0; 4],
+                        0.0,
+                    );
                 }
             }
-            // pick closer of the two final candidates
-            let (lo_w, _) = ctx.fonts.measure_sized(
-                &value_str[..boundaries[lo]],
-                font_id,
-                size,
-                self.font_weight,
-            );
-            let (hi_w, _) = ctx.fonts.measure_sized(
-                &value_str[..boundaries[hi]],
-                font_id,
-                size,
-                self.font_weight,
-            );
-            let best = if (lo_w - click_x).abs() <= (hi_w - click_x).abs() {
-                boundaries[lo]
-            } else {
-                boundaries[hi]
-            };
-            ctx.state
-                .get_or_default_mut::<TextInputState>(&self.id)
-                .cursor = best;
         }
 
+        // text or placeholder
         if value_str.is_empty() {
             let col = self
                 .placeholder_color
@@ -269,7 +328,9 @@ impl<M: Clone + 'static> TextInput<M> {
             );
         }
 
-        if focused {
+        // cursor — hidden when there is a selection
+        let has_selection = selection_anchor.map_or(false, |a| a != cursor_pos);
+        if focused && !has_selection {
             let cursor_col = self
                 .style
                 .text_color
@@ -278,12 +339,11 @@ impl<M: Clone + 'static> TextInput<M> {
                 ((text_origin_x + cursor_x_snapped - scroll_snapped) * s).floor() / s;
             let cursor_draw_y = (ty * s).floor() / s;
             let cursor_h = (th * s).ceil() / s;
-            let cursor_w = 2.0;
             if cursor_draw_x >= x + pad_l && cursor_draw_x <= x + w - pad_r {
                 ctx.sr.draw_rect(
                     cursor_draw_x,
                     cursor_draw_y,
-                    cursor_w,
+                    2.0,
                     cursor_h,
                     with_opacity(cursor_col.to_array(), self.style.opacity),
                     [0.0; 4],
@@ -427,6 +487,79 @@ impl<M: Clone + 'static> TextInput<M> {
     }
 }
 
+// helpers
+
+fn word_start(value: &str, pos: usize) -> usize {
+    let mut i = pos.min(value.len());
+    while i > 0 {
+        if let Some((j, c)) = value[..i].char_indices().next_back() {
+            if c.is_alphanumeric() || c == '_' {
+                i = j;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    i
+}
+
+fn word_end(value: &str, pos: usize) -> usize {
+    let mut i = pos;
+    for (j, c) in value[pos..].char_indices() {
+        if c.is_alphanumeric() || c == '_' {
+            i = pos + j + c.len_utf8();
+        } else {
+            break;
+        }
+    }
+    i
+}
+
+fn hit_test_cursor(
+    value: &str,
+    click_x: f32,
+    fonts: &mut Fonts,
+    font_id: crate::FontId,
+    size: f32,
+    weight: u16,
+) -> usize {
+    if value.is_empty() {
+        return 0;
+    }
+    let boundaries: Vec<usize> = value
+        .char_indices()
+        .map(|(i, _)| i)
+        .chain(std::iter::once(value.len()))
+        .collect();
+    let mut lo = 0usize;
+    let mut hi = boundaries.len() - 1;
+    while hi - lo > 1 {
+        let mid = (lo + hi) / 2;
+        let (measured, _) = fonts.measure_sized(&value[..boundaries[mid]], font_id, size, weight);
+        if measured <= click_x {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    let (lo_w, _) = fonts.measure_sized(&value[..boundaries[lo]], font_id, size, weight);
+    let (hi_w, _) = fonts.measure_sized(&value[..boundaries[hi]], font_id, size, weight);
+    if (lo_w - click_x).abs() <= (hi_w - click_x).abs() {
+        boundaries[lo]
+    } else {
+        boundaries[hi]
+    }
+}
+
+fn selection_range(cursor: usize, anchor: Option<usize>) -> (usize, usize) {
+    match anchor {
+        Some(a) => (a.min(cursor), a.max(cursor)),
+        None => (cursor, cursor),
+    }
+}
+
 // state helpers used by app.rs for keyboard handling
 
 pub(crate) fn register_callback<M: Clone + 'static>(
@@ -475,14 +608,23 @@ pub fn handle_key(
         .get_or_default::<TextInputState>(id)
         .cursor
         .min(value.len());
+    let mut selection_anchor = state.get_or_default::<TextInputState>(id).selection_anchor;
     let mut changed = false;
+
+    let has_selection = selection_anchor.map_or(false, |a| a != cursor);
 
     match event {
         Event::KeyPressed {
             key: Key::Backspace,
             ..
         } => {
-            if cursor > 0 {
+            if has_selection {
+                let (sel_start, sel_end) = selection_range(cursor, selection_anchor);
+                value.drain(sel_start..sel_end);
+                cursor = sel_start;
+                selection_anchor = None;
+                changed = true;
+            } else if cursor > 0 {
                 if let Some((i, _)) = value[..cursor].char_indices().next_back() {
                     value.remove(i);
                     cursor = i;
@@ -493,13 +635,23 @@ pub fn handle_key(
         Event::KeyPressed {
             key: Key::Delete, ..
         } => {
-            if cursor < value.len() {
+            if has_selection {
+                let (sel_start, sel_end) = selection_range(cursor, selection_anchor);
+                value.drain(sel_start..sel_end);
+                cursor = sel_start;
+                selection_anchor = None;
+                changed = true;
+            } else if cursor < value.len() {
                 value.remove(cursor);
                 changed = true;
             }
         }
         Event::KeyPressed { key: Key::Left, .. } => {
-            if cursor > 0 {
+            if has_selection {
+                let (sel_start, _) = selection_range(cursor, selection_anchor);
+                cursor = sel_start;
+                selection_anchor = None;
+            } else if cursor > 0 {
                 if let Some((i, _)) = value[..cursor].char_indices().next_back() {
                     cursor = i;
                 }
@@ -508,7 +660,11 @@ pub fn handle_key(
         Event::KeyPressed {
             key: Key::Right, ..
         } => {
-            if cursor < value.len() {
+            if has_selection {
+                let (_, sel_end) = selection_range(cursor, selection_anchor);
+                cursor = sel_end;
+                selection_anchor = None;
+            } else if cursor < value.len() {
                 cursor = value[cursor..]
                     .char_indices()
                     .nth(1)
@@ -518,12 +674,20 @@ pub fn handle_key(
         }
         Event::KeyPressed { key: Key::Home, .. } => {
             cursor = 0;
+            selection_anchor = None;
         }
         Event::KeyPressed { key: Key::End, .. } => {
             cursor = value.len();
+            selection_anchor = None;
         }
         Event::KeyPressed { .. } => {
             if !text.is_empty() && text != "\r" && text != "\n" && text != "\r\n" {
+                if has_selection {
+                    let (sel_start, sel_end) = selection_range(cursor, selection_anchor);
+                    value.drain(sel_start..sel_end);
+                    cursor = sel_start;
+                    selection_anchor = None;
+                }
                 value.insert_str(cursor, text);
                 cursor += text.len();
                 changed = true;
@@ -532,7 +696,9 @@ pub fn handle_key(
         _ => {}
     }
 
-    state.get_or_default_mut::<TextInputState>(id).cursor = cursor;
+    let s = state.get_or_default_mut::<TextInputState>(id);
+    s.cursor = cursor;
+    s.selection_anchor = selection_anchor;
     if changed {
         cache_value(state, id, &value);
         Some(value)

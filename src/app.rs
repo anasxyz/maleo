@@ -121,6 +121,8 @@ struct Runner<A: App> {
     ctrl: bool,
     shift: bool,
     alt: bool,
+    start_time: std::time::Instant,
+    last_left_click_time: f64,
 }
 
 impl<A: App> Runner<A> {
@@ -161,11 +163,16 @@ impl<A: App> Runner<A> {
                 right_just_pressed: false,
                 middle_pressed: false,
                 middle_just_pressed: false,
+                left_click_count: 0,
+                left_click_x: 0.0,
+                left_click_y: 0.0,
             },
             exclusive_tasks: HashMap::new(),
             ctrl: false,
             shift: false,
             alt: false,
+            start_time: std::time::Instant::now(),
+            last_left_click_time: -1.0,
         }
     }
 
@@ -421,6 +428,23 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                             self.mouse.left_just_pressed = pressed && !self.mouse.left_pressed;
                             self.mouse.left_just_released = !pressed && self.mouse.left_pressed;
                             self.mouse.left_pressed = pressed;
+                            if pressed {
+                                let now = self.start_time.elapsed().as_secs_f64();
+                                let dt = now - self.last_left_click_time;
+                                let dx = self.mouse.x - self.mouse.left_click_x;
+                                let dy = self.mouse.y - self.mouse.left_click_y;
+                                let dist = (dx * dx + dy * dy).sqrt();
+                                const DOUBLE_CLICK_TIME: f64 = 0.3;
+                                const DOUBLE_CLICK_DIST: f32 = 4.0;
+                                if dt < DOUBLE_CLICK_TIME && dist < DOUBLE_CLICK_DIST {
+                                    self.mouse.left_click_count += 1;
+                                } else {
+                                    self.mouse.left_click_count = 1;
+                                }
+                                self.mouse.left_click_x = self.mouse.x;
+                                self.mouse.left_click_y = self.mouse.y;
+                                self.last_left_click_time = now;
+                            }
                         }
                         MouseButton::Right => {
                             self.mouse.right_just_pressed = pressed && !self.mouse.right_pressed;
