@@ -72,69 +72,24 @@ impl<M: Clone + 'static> TextInput<M> {
         let hovered =
             ctx.mouse.x >= x && ctx.mouse.x <= x + w && ctx.mouse.y >= y && ctx.mouse.y <= y + h;
 
-        if ctx.mouse.left_just_pressed {
-            let state = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
-            state.focused = hovered;
-            state.selection_anchor = None;
-            state.dragging = hovered;
-        }
-        if !ctx.mouse.left_pressed {
-            ctx.state
-                .get_or_default_mut::<TextInputState>(&self.id)
-                .dragging = false;
-        }
-        {
-            let s = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
-            s.cursor = s.cursor.min(value_str.len());
-        }
-        let focused = ctx.state.get_or_default::<TextInputState>(&self.id).focused;
-
-        // background
-        let default_bg = Color::new(0.13, 0.13, 0.17, 1.0);
-        let bg = self.style.background.unwrap_or(default_bg);
-        let bg = if focused {
-            bg.lighten(0.05)
-        } else if hovered {
-            bg.lighten(0.03)
-        } else {
-            bg
-        };
-
-        // border
-        let (border_col, border_w) = if let Some(col) = self.style.border_color {
-            (col, self.style.border_thickness)
-        } else {
-            let default_col = if focused {
-                Color::new(0.4, 0.5, 0.9, 1.0)
-            } else {
-                Color::new(0.3, 0.3, 0.35, 1.0)
-            };
-            (default_col, 1.5)
-        };
-        let border_col = if focused {
-            border_col.lighten(0.05)
-        } else if hovered {
-            border_col.lighten(0.03)
-        } else {
-            border_col
-        };
-
-        ctx.sr.draw_rounded_rect(
-            x,
-            y,
-            w,
-            h,
-            self.style.border_radius,
-            with_opacity(bg.to_array(), self.style.opacity),
-            if border_w > 0.0 {
-                with_opacity(border_col.to_array(), self.style.opacity)
-            } else {
-                [0.0; 4]
-            },
-            border_w,
+        update_focus_and_drag(
+            ctx.state,
+            &self.id,
+            hovered,
+            ctx.mouse.left_just_pressed,
+            ctx.mouse.left_pressed,
         );
+        let focused = ctx.state.get_or_default::<TextInputState>(&self.id).focused;
+        ctx.state
+            .get_or_default_mut::<TextInputState>(&self.id)
+            .cursor = ctx
+            .state
+            .get_or_default::<TextInputState>(&self.id)
+            .cursor
+            .min(value_str.len());
 
-        // font metrics
+        draw_background(ctx, x, y, w, h, &self.style, focused, hovered);
+
         let font_id = self
             .font
             .as_deref()
@@ -160,196 +115,109 @@ impl<M: Clone + 'static> TextInput<M> {
         } else {
             y + (h - th) / 2.0
         };
-
         let text_area_w = w - pad_l - pad_r;
         let text_clip = Some([x + pad_l, y, x + w - pad_r, y + h]);
+        let sc = ctx.scale_factor;
+        let text_origin_x = ((x + pad_l) * sc).floor() / sc;
 
-        let s = ctx.scale_factor;
-        let text_origin_x = ((x + pad_l) * s).floor() / s;
-
-        // cursor position and scroll
-        let cursor_pos = ctx.state.get_or_default::<TextInputState>(&self.id).cursor;
-        let (cursor_x_abs, _) =
-            ctx.fonts
-                .measure_sized(&value_str[..cursor_pos], font_id, size, self.font_weight);
-        let cursor_x_snapped = (cursor_x_abs * s).floor() / s;
-        {
-            let s_state = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
-            if cursor_x_abs - s_state.scroll_offset > text_area_w - 2.0 {
-                s_state.scroll_offset = cursor_x_abs - text_area_w + 2.0;
-            }
-            if cursor_x_abs - s_state.scroll_offset < 0.0 {
-                s_state.scroll_offset = cursor_x_abs;
-            }
-            if s_state.scroll_offset < 0.0 {
-                s_state.scroll_offset = 0.0;
-            }
-        }
+        update_scroll(
+            ctx.state,
+            &self.id,
+            value_str,
+            font_id,
+            size,
+            self.font_weight,
+            text_area_w,
+            ctx.fonts,
+        );
         let scroll = ctx
             .state
             .get_or_default::<TextInputState>(&self.id)
             .scroll_offset;
-        let scroll_snapped = (scroll * s).floor() / s;
+        let scroll_snapped = (scroll * sc).floor() / sc;
 
-        // click / drag / double-click / triple-click
-        let dragging = ctx
-            .state
-            .get_or_default::<TextInputState>(&self.id)
-            .dragging;
-        if ctx.mouse.left_just_pressed && hovered {
-            let click_x = ctx.mouse.x - text_origin_x + scroll;
-            let hit = hit_test_cursor(
-                value_str,
-                click_x,
-                ctx.fonts,
-                font_id,
-                size,
-                self.font_weight,
-            );
-            let state = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
-            match ctx.mouse.left_click_count {
-                2 => {
-                    let ws = word_start(value_str, hit);
-                    let we = word_end(value_str, hit);
-                    if ws < we {
-                        state.selection_anchor = Some(ws);
-                        state.cursor = we;
-                    } else {
-                        state.cursor = hit;
-                        state.selection_anchor = None;
-                    }
-                }
-                3 => {
-                    state.selection_anchor = Some(0);
-                    state.cursor = value_str.len();
-                }
-                _ => {
-                    state.cursor = hit;
-                    state.selection_anchor = None;
-                }
-            }
-        } else if dragging && ctx.mouse.left_pressed {
-            let click_x = ctx.mouse.x - text_origin_x + scroll;
-            let hit = hit_test_cursor(
-                value_str,
-                click_x,
-                ctx.fonts,
-                font_id,
-                size,
-                self.font_weight,
-            );
-            let state = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
-            if hit != state.cursor {
-                if state.selection_anchor.is_none() {
-                    state.selection_anchor = Some(state.cursor);
-                }
-                state.cursor = hit;
-            }
-        }
+        handle_mouse(
+            ctx,
+            &self.id,
+            value_str,
+            font_id,
+            size,
+            self.font_weight,
+            text_origin_x,
+            scroll,
+            hovered,
+        );
 
-        // re-read after click/drag may have mutated state this frame
+        // re-read after mouse handling may have mutated state this frame
         let cursor_pos = ctx.state.get_or_default::<TextInputState>(&self.id).cursor;
         let (cursor_x_abs, _) =
             ctx.fonts
                 .measure_sized(&value_str[..cursor_pos], font_id, size, self.font_weight);
-        let cursor_x_snapped = (cursor_x_abs * s).floor() / s;
-
-        // selection highlight
+        let cursor_x_snapped = (cursor_x_abs * sc).floor() / sc;
         let selection_anchor = ctx
             .state
             .get_or_default::<TextInputState>(&self.id)
             .selection_anchor;
-        if let Some(anchor) = selection_anchor {
-            if anchor != cursor_pos && focused {
-                let sel_start = anchor.min(cursor_pos);
-                let sel_end = anchor.max(cursor_pos);
-                let (sel_start_x, _) = ctx.fonts.measure_sized(
-                    &value_str[..sel_start],
-                    font_id,
-                    size,
-                    self.font_weight,
-                );
-                let (sel_end_x, _) =
-                    ctx.fonts
-                        .measure_sized(&value_str[..sel_end], font_id, size, self.font_weight);
-                let sx = (text_origin_x + sel_start_x - scroll_snapped).max(x + pad_l);
-                let ex = (text_origin_x + sel_end_x - scroll_snapped).min(x + w - pad_r);
-                if ex > sx {
-                    ctx.sr.draw_rect(
-                        sx,
-                        (ty * s).floor() / s,
-                        ex - sx,
-                        (th * s).ceil() / s,
-                        with_opacity([0.3, 0.5, 0.9, 0.4], self.style.opacity),
-                        [0.0; 4],
-                        0.0,
-                    );
-                }
-            }
-        }
-
-        // text or placeholder
-        if value_str.is_empty() {
-            let col = self
-                .placeholder_color
-                .unwrap_or(Color::new(0.45, 0.45, 0.5, 1.0));
-            ctx.tr.draw(
-                &mut ctx.fonts.font_system,
-                family,
-                size,
-                self.font_weight,
-                false,
-                TextAlign::Left,
-                &self.placeholder,
-                text_origin_x,
-                ty,
-                99999.0,
-                text_clip,
-                with_opacity(col.to_array(), self.style.opacity).into(),
-            );
-        } else {
-            let col = self
-                .style
-                .text_color
-                .unwrap_or(Color::new(0.92, 0.92, 0.95, 1.0));
-            ctx.tr.draw(
-                &mut ctx.fonts.font_system,
-                family,
-                size,
-                self.font_weight,
-                false,
-                TextAlign::Left,
-                value_str,
-                text_origin_x - scroll_snapped,
-                ty,
-                99999.0,
-                text_clip,
-                with_opacity(col.to_array(), self.style.opacity).into(),
-            );
-        }
-
-        // cursor — hidden when there is a selection
         let has_selection = selection_anchor.map_or(false, |a| a != cursor_pos);
+
+        draw_selection(
+            ctx,
+            x,
+            w,
+            pad_l,
+            pad_r,
+            text_origin_x,
+            scroll_snapped,
+            ty,
+            th,
+            sc,
+            value_str,
+            font_id,
+            size,
+            self.font_weight,
+            cursor_pos,
+            selection_anchor,
+            focused,
+            self.style.opacity,
+        );
+
+        draw_text(
+            ctx,
+            x,
+            w,
+            pad_l,
+            pad_r,
+            text_origin_x,
+            scroll_snapped,
+            ty,
+            sc,
+            text_clip,
+            family,
+            size,
+            self.font_weight,
+            value_str,
+            &self.placeholder,
+            self.placeholder_color,
+            self.style.text_color,
+            self.style.opacity,
+        );
+
         if focused && !has_selection {
-            let cursor_col = self
-                .style
-                .text_color
-                .unwrap_or(Color::new(0.7, 0.75, 1.0, 1.0));
-            let cursor_draw_x =
-                ((text_origin_x + cursor_x_snapped - scroll_snapped) * s).floor() / s;
-            let cursor_draw_y = (ty * s).floor() / s;
-            let cursor_h = (th * s).ceil() / s;
-            if cursor_draw_x >= x + pad_l && cursor_draw_x <= x + w - pad_r {
-                ctx.sr.draw_rect(
-                    cursor_draw_x,
-                    cursor_draw_y,
-                    2.0,
-                    cursor_h,
-                    with_opacity(cursor_col.to_array(), self.style.opacity),
-                    [0.0; 4],
-                    0.0,
-                );
-            }
+            draw_cursor(
+                ctx,
+                x,
+                w,
+                pad_l,
+                pad_r,
+                text_origin_x,
+                cursor_x_snapped,
+                scroll_snapped,
+                ty,
+                th,
+                sc,
+                self.style.text_color,
+                self.style.opacity,
+            );
         }
 
         check_interactions(&self.interactions, x, y, w, h, ctx);
@@ -368,7 +236,6 @@ impl<M: Clone + 'static> TextInput<M> {
         } else {
             16.0
         };
-        let natural_h = th + pad_v;
         taffy
             .new_leaf(taffy::Style {
                 size: taffy::geometry::Size {
@@ -377,7 +244,7 @@ impl<M: Clone + 'static> TextInput<M> {
                         other => val_to_dimension(other),
                     },
                     height: match &self.layout.height {
-                        Val::Auto => Dimension::Length(natural_h),
+                        Val::Auto => Dimension::Length(th + pad_v),
                         other => val_to_dimension(other),
                     },
                 },
@@ -487,7 +354,296 @@ impl<M: Clone + 'static> TextInput<M> {
     }
 }
 
-// helpers
+// draw helpers
+
+fn update_focus_and_drag(
+    state: &mut StateStore,
+    id: &str,
+    hovered: bool,
+    just_pressed: bool,
+    pressed: bool,
+) {
+    if just_pressed {
+        let s = state.get_or_default_mut::<TextInputState>(id);
+        s.focused = hovered;
+        s.selection_anchor = None;
+        s.dragging = hovered;
+    }
+    if !pressed {
+        state.get_or_default_mut::<TextInputState>(id).dragging = false;
+    }
+}
+
+fn draw_background<M: Clone + 'static>(
+    ctx: &mut DrawCtx<M>,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    style: &Style,
+    focused: bool,
+    hovered: bool,
+) {
+    let bg = style
+        .background
+        .unwrap_or(Color::new(0.13, 0.13, 0.17, 1.0));
+    let bg = if focused {
+        bg.lighten(0.05)
+    } else if hovered {
+        bg.lighten(0.03)
+    } else {
+        bg
+    };
+
+    let (border_col, border_w) = if let Some(col) = style.border_color {
+        (col, style.border_thickness)
+    } else {
+        let col = if focused {
+            Color::new(0.4, 0.5, 0.9, 1.0)
+        } else {
+            Color::new(0.3, 0.3, 0.35, 1.0)
+        };
+        (col, 1.5)
+    };
+    let border_col = if focused {
+        border_col.lighten(0.05)
+    } else if hovered {
+        border_col.lighten(0.03)
+    } else {
+        border_col
+    };
+
+    ctx.sr.draw_rounded_rect(
+        x,
+        y,
+        w,
+        h,
+        style.border_radius,
+        with_opacity(bg.to_array(), style.opacity),
+        if border_w > 0.0 {
+            with_opacity(border_col.to_array(), style.opacity)
+        } else {
+            [0.0; 4]
+        },
+        border_w,
+    );
+}
+
+fn update_scroll(
+    state: &mut StateStore,
+    id: &str,
+    value: &str,
+    font_id: crate::FontId,
+    size: f32,
+    weight: u16,
+    text_area_w: f32,
+    fonts: &mut Fonts,
+) {
+    let cursor_pos = state.get_or_default::<TextInputState>(id).cursor;
+    let (cursor_x, _) = fonts.measure_sized(&value[..cursor_pos], font_id, size, weight);
+    let s = state.get_or_default_mut::<TextInputState>(id);
+    if cursor_x - s.scroll_offset > text_area_w - 2.0 {
+        s.scroll_offset = cursor_x - text_area_w + 2.0;
+    }
+    if cursor_x - s.scroll_offset < 0.0 {
+        s.scroll_offset = cursor_x;
+    }
+    if s.scroll_offset < 0.0 {
+        s.scroll_offset = 0.0;
+    }
+}
+
+fn handle_mouse<M: Clone + 'static>(
+    ctx: &mut DrawCtx<M>,
+    id: &str,
+    value: &str,
+    font_id: crate::FontId,
+    size: f32,
+    weight: u16,
+    text_origin_x: f32,
+    scroll: f32,
+    hovered: bool,
+) {
+    let dragging = ctx.state.get_or_default::<TextInputState>(id).dragging;
+
+    if ctx.mouse.left_just_pressed && hovered {
+        let click_x = ctx.mouse.x - text_origin_x + scroll;
+        let hit = hit_test_cursor(value, click_x, ctx.fonts, font_id, size, weight);
+        let state = ctx.state.get_or_default_mut::<TextInputState>(id);
+        match ctx.mouse.left_click_count {
+            2 => {
+                let ws = word_start(value, hit);
+                let we = word_end(value, hit);
+                if ws < we {
+                    state.selection_anchor = Some(ws);
+                    state.cursor = we;
+                } else {
+                    state.cursor = hit;
+                    state.selection_anchor = None;
+                }
+            }
+            3 => {
+                state.selection_anchor = Some(0);
+                state.cursor = value.len();
+            }
+            _ => {
+                state.cursor = hit;
+                state.selection_anchor = None;
+            }
+        }
+    } else if dragging && ctx.mouse.left_pressed {
+        let click_x = ctx.mouse.x - text_origin_x + scroll;
+        let hit = hit_test_cursor(value, click_x, ctx.fonts, font_id, size, weight);
+        let state = ctx.state.get_or_default_mut::<TextInputState>(id);
+        if hit != state.cursor {
+            if state.selection_anchor.is_none() {
+                state.selection_anchor = Some(state.cursor);
+            }
+            state.cursor = hit;
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_selection<M: Clone + 'static>(
+    ctx: &mut DrawCtx<M>,
+    x: f32,
+    w: f32,
+    pad_l: f32,
+    pad_r: f32,
+    text_origin_x: f32,
+    scroll_snapped: f32,
+    ty: f32,
+    th: f32,
+    sc: f32,
+    value: &str,
+    font_id: crate::FontId,
+    size: f32,
+    weight: u16,
+    cursor_pos: usize,
+    selection_anchor: Option<usize>,
+    focused: bool,
+    opacity: f32,
+) {
+    let Some(anchor) = selection_anchor else {
+        return;
+    };
+    if anchor == cursor_pos || !focused {
+        return;
+    }
+
+    let sel_start = anchor.min(cursor_pos);
+    let sel_end = anchor.max(cursor_pos);
+    let (sel_start_x, _) = ctx
+        .fonts
+        .measure_sized(&value[..sel_start], font_id, size, weight);
+    let (sel_end_x, _) = ctx
+        .fonts
+        .measure_sized(&value[..sel_end], font_id, size, weight);
+    let sx = (text_origin_x + sel_start_x - scroll_snapped).max(x + pad_l);
+    let ex = (text_origin_x + sel_end_x - scroll_snapped).min(x + w - pad_r);
+    if ex > sx {
+        ctx.sr.draw_rect(
+            sx,
+            (ty * sc).floor() / sc,
+            ex - sx,
+            (th * sc).ceil() / sc,
+            with_opacity([0.3, 0.5, 0.9, 0.4], opacity),
+            [0.0; 4],
+            0.0,
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_text<M: Clone + 'static>(
+    ctx: &mut DrawCtx<M>,
+    x: f32,
+    w: f32,
+    pad_l: f32,
+    pad_r: f32,
+    text_origin_x: f32,
+    scroll_snapped: f32,
+    ty: f32,
+    _sc: f32,
+    text_clip: Option<[f32; 4]>,
+    family: String,
+    size: f32,
+    weight: u16,
+    value: &str,
+    placeholder: &str,
+    placeholder_color: Option<Color>,
+    text_color: Option<Color>,
+    opacity: f32,
+) {
+    if value.is_empty() {
+        let col = placeholder_color.unwrap_or(Color::new(0.45, 0.45, 0.5, 1.0));
+        ctx.tr.draw(
+            &mut ctx.fonts.font_system,
+            family,
+            size,
+            weight,
+            false,
+            TextAlign::Left,
+            placeholder,
+            text_origin_x,
+            ty,
+            99999.0,
+            text_clip,
+            with_opacity(col.to_array(), opacity).into(),
+        );
+    } else {
+        let col = text_color.unwrap_or(Color::new(0.92, 0.92, 0.95, 1.0));
+        ctx.tr.draw(
+            &mut ctx.fonts.font_system,
+            family,
+            size,
+            weight,
+            false,
+            TextAlign::Left,
+            value,
+            text_origin_x - scroll_snapped,
+            ty,
+            99999.0,
+            text_clip,
+            with_opacity(col.to_array(), opacity).into(),
+        );
+    }
+}
+
+fn draw_cursor<M: Clone + 'static>(
+    ctx: &mut DrawCtx<M>,
+    x: f32,
+    w: f32,
+    pad_l: f32,
+    pad_r: f32,
+    text_origin_x: f32,
+    cursor_x_snapped: f32,
+    scroll_snapped: f32,
+    ty: f32,
+    th: f32,
+    sc: f32,
+    text_color: Option<Color>,
+    opacity: f32,
+) {
+    let col = text_color.unwrap_or(Color::new(0.7, 0.75, 1.0, 1.0));
+    let cursor_x = ((text_origin_x + cursor_x_snapped - scroll_snapped) * sc).floor() / sc;
+    let cursor_y = (ty * sc).floor() / sc;
+    let cursor_h = (th * sc).ceil() / sc;
+    if cursor_x >= x + pad_l && cursor_x <= x + w - pad_r {
+        ctx.sr.draw_rect(
+            cursor_x,
+            cursor_y,
+            2.0,
+            cursor_h,
+            with_opacity(col.to_array(), opacity),
+            [0.0; 4],
+            0.0,
+        );
+    }
+}
+
+// text helpers
 
 fn word_start(value: &str, pos: usize) -> usize {
     let mut i = pos.min(value.len());
@@ -610,7 +766,6 @@ pub fn handle_key(
         .min(value.len());
     let mut selection_anchor = state.get_or_default::<TextInputState>(id).selection_anchor;
     let mut changed = false;
-
     let has_selection = selection_anchor.map_or(false, |a| a != cursor);
 
     match event {
@@ -619,9 +774,9 @@ pub fn handle_key(
             ..
         } => {
             if has_selection {
-                let (sel_start, sel_end) = selection_range(cursor, selection_anchor);
-                value.drain(sel_start..sel_end);
-                cursor = sel_start;
+                let (start, end) = selection_range(cursor, selection_anchor);
+                value.drain(start..end);
+                cursor = start;
                 selection_anchor = None;
                 changed = true;
             } else if cursor > 0 {
@@ -636,9 +791,9 @@ pub fn handle_key(
             key: Key::Delete, ..
         } => {
             if has_selection {
-                let (sel_start, sel_end) = selection_range(cursor, selection_anchor);
-                value.drain(sel_start..sel_end);
-                cursor = sel_start;
+                let (start, end) = selection_range(cursor, selection_anchor);
+                value.drain(start..end);
+                cursor = start;
                 selection_anchor = None;
                 changed = true;
             } else if cursor < value.len() {
@@ -648,8 +803,7 @@ pub fn handle_key(
         }
         Event::KeyPressed { key: Key::Left, .. } => {
             if has_selection {
-                let (sel_start, _) = selection_range(cursor, selection_anchor);
-                cursor = sel_start;
+                cursor = selection_range(cursor, selection_anchor).0;
                 selection_anchor = None;
             } else if cursor > 0 {
                 if let Some((i, _)) = value[..cursor].char_indices().next_back() {
@@ -661,8 +815,7 @@ pub fn handle_key(
             key: Key::Right, ..
         } => {
             if has_selection {
-                let (_, sel_end) = selection_range(cursor, selection_anchor);
-                cursor = sel_end;
+                cursor = selection_range(cursor, selection_anchor).1;
                 selection_anchor = None;
             } else if cursor < value.len() {
                 cursor = value[cursor..]
@@ -683,9 +836,9 @@ pub fn handle_key(
         Event::KeyPressed { .. } => {
             if !text.is_empty() && text != "\r" && text != "\n" && text != "\r\n" {
                 if has_selection {
-                    let (sel_start, sel_end) = selection_range(cursor, selection_anchor);
-                    value.drain(sel_start..sel_end);
-                    cursor = sel_start;
+                    let (start, end) = selection_range(cursor, selection_anchor);
+                    value.drain(start..end);
+                    cursor = start;
                     selection_anchor = None;
                 }
                 value.insert_str(cursor, text);
