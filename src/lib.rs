@@ -28,6 +28,7 @@ pub(crate) mod widgets;
 
 pub use app::{App, Settings};
 pub use color::Color;
+pub use draw::Cursor;
 pub use element::*;
 pub use events::{Event, Key, MouseButton, key_code_to_key};
 pub use fonts::{FontBuilder, FontId, Fonts};

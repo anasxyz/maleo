@@ -39,6 +39,10 @@ impl<M: Clone + 'static> Button<M> {
             ctx.mouse.x >= x && ctx.mouse.x <= x + w && ctx.mouse.y >= y && ctx.mouse.y <= y + h;
         let pressed = hovered && ctx.mouse.left_just_pressed;
 
+        if hovered {
+            *ctx.cursor = Some(crate::draw::Cursor::Pointer);
+        }
+
         let bg = if pressed {
             self.style
                 .background

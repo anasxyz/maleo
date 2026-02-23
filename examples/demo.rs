@@ -22,6 +22,10 @@ impl App for MyApp {
         }
     }
 
+    fn start(&mut self) -> Vec<Task<Action>> {
+        vec![]
+    }
+
     fn view(&self) -> Element<Action> {
         column(vec![
             text("Billing address:", Color::hex("#1f282d"))
@@ -55,9 +59,11 @@ impl App for MyApp {
 
     fn update(&mut self, action: Action) -> Vec<Task<Action>> {
         match action {
-            Action::UpdateAddress(v) => self.address = v,
+            Action::UpdateAddress(v) => {
+                self.address = v;
+                vec![]
+            },
         }
-        vec![]
     }
 
     fn fonts(&self, fonts: &mut Fonts) {

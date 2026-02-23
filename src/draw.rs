@@ -1,6 +1,21 @@
 use crate::state::StateStore;
 use crate::{Element, Fonts, ShadowRenderer, ShapeRenderer, TextRenderer};
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum Cursor {
+    Default,
+    Text,
+    Pointer,
+    Crosshair,
+    Move,
+    ResizeNS,
+    ResizeEW,
+    NotAllowed,
+    Grab,
+    Grabbing,
+    Wait,
+}
+
 // all mouse state in one place
 pub struct MouseState {
     pub x: f32,
@@ -28,6 +43,7 @@ pub struct DrawCtx<'a, M> {
     pub clip: Option<[f32; 4]>,
     pub actions: &'a mut Vec<M>,
     pub scale_factor: f32,
+    pub cursor: &'a mut Option<Cursor>,
 }
 
 pub fn draw<M: Clone + 'static>(
@@ -39,8 +55,9 @@ pub fn draw<M: Clone + 'static>(
     state: &mut StateStore,
     mouse: &MouseState,
     scale_factor: f32,
-) -> Vec<M> {
+) -> (Vec<M>, Option<Cursor>) {
     let mut actions = Vec::new();
+    let mut cursor = None;
     let mut ctx = DrawCtx {
         sr,
         shadow,
@@ -51,9 +68,10 @@ pub fn draw<M: Clone + 'static>(
         clip: None,
         actions: &mut actions,
         scale_factor,
+        cursor: &mut cursor,
     };
     draw_element(element, &mut ctx);
-    actions
+    (actions, cursor)
 }
 
 pub fn draw_element<M: Clone + 'static>(el: &mut Element<M>, ctx: &mut DrawCtx<M>) {

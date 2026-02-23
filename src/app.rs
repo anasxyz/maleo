@@ -10,7 +10,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::draw::{MouseState, draw};
+use crate::draw::{Cursor, MouseState, draw};
 use crate::events::{Event, Key, MouseButton};
 use crate::layout::do_layout;
 use crate::state::StateStore;
@@ -118,6 +118,7 @@ struct Runner<A: App> {
     rt: tokio::runtime::Runtime,
     mouse: MouseState,
     exclusive_tasks: HashMap<u64, tokio::task::AbortHandle>,
+    current_cursor: Cursor,
     ctrl: bool,
     shift: bool,
     alt: bool,
@@ -168,6 +169,7 @@ impl<A: App> Runner<A> {
                 left_click_y: 0.0,
             },
             exclusive_tasks: HashMap::new(),
+            current_cursor: Cursor::Default,
             ctrl: false,
             shift: false,
             alt: false,
@@ -265,7 +267,7 @@ impl<A: App> Runner<A> {
         let mut tree = self.app.view();
         do_layout(&mut tree, width, height, self.fonts.as_mut().unwrap());
 
-        let actions = draw(
+        let (actions, cursor) = draw(
             &mut tree,
             self.shape_renderer.as_mut().unwrap(),
             self.shadow_renderer.as_mut().unwrap(),
@@ -275,6 +277,25 @@ impl<A: App> Runner<A> {
             &self.mouse,
             self.scale_factor as f32,
         );
+
+        let resolved_cursor = cursor.unwrap_or(Cursor::Default);
+        if resolved_cursor != self.current_cursor {
+            self.current_cursor = resolved_cursor;
+            let winit_cursor = match resolved_cursor {
+                Cursor::Default => winit::window::CursorIcon::Default,
+                Cursor::Text => winit::window::CursorIcon::Text,
+                Cursor::Pointer => winit::window::CursorIcon::Pointer,
+                Cursor::Crosshair => winit::window::CursorIcon::Crosshair,
+                Cursor::Move => winit::window::CursorIcon::Move,
+                Cursor::ResizeNS => winit::window::CursorIcon::NsResize,
+                Cursor::ResizeEW => winit::window::CursorIcon::EwResize,
+                Cursor::NotAllowed => winit::window::CursorIcon::NotAllowed,
+                Cursor::Grab => winit::window::CursorIcon::Grab,
+                Cursor::Grabbing => winit::window::CursorIcon::Grabbing,
+                Cursor::Wait => winit::window::CursorIcon::Wait,
+            };
+            self.window().set_cursor(winit_cursor);
+        }
 
         {
             let gpu = self.gpu.as_ref().unwrap();

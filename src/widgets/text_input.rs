@@ -72,6 +72,10 @@ impl<M: Clone + 'static> TextInput<M> {
         let hovered =
             ctx.mouse.x >= x && ctx.mouse.x <= x + w && ctx.mouse.y >= y && ctx.mouse.y <= y + h;
 
+        if hovered {
+            *ctx.cursor = Some(crate::draw::Cursor::Text);
+        }
+
         update_focus_and_drag(
             ctx.state,
             &self.id,
