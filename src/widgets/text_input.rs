@@ -634,7 +634,7 @@ fn draw_cursor<M: Clone + 'static>(
         ctx.sr.draw_rect(
             cursor_x,
             cursor_y,
-            2.0,
+            1.0,
             cursor_h,
             with_opacity(col.to_array(), opacity),
             [0.0; 4],
