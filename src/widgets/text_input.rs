@@ -81,14 +81,15 @@ impl<M: Clone + 'static> TextInput<M> {
         }
         let focused = ctx.state.get_or_default::<TextInputState>(&self.id).focused;
 
-        let default_bg = if focused {
-            Color::new(0.18, 0.18, 0.22, 1.0)
-        } else if hovered {
-            Color::new(0.16, 0.16, 0.20, 1.0)
-        } else {
-            Color::new(0.13, 0.13, 0.17, 1.0)
-        };
+        let default_bg = Color::new(0.13, 0.13, 0.17, 1.0);
         let bg = self.style.background.unwrap_or(default_bg);
+        let bg = if focused {
+            bg.lighten(0.05)
+        } else if hovered {
+            bg.lighten(0.03)
+        } else {
+            bg
+        };
 
         let (border_col, border_w) = if let Some(col) = self.style.border_color {
             (col, self.style.border_thickness)
@@ -99,6 +100,13 @@ impl<M: Clone + 'static> TextInput<M> {
                 Color::new(0.3, 0.3, 0.35, 1.0)
             };
             (default_col, 1.5)
+        };
+        let border_col = if focused {
+            border_col.lighten(0.05)
+        } else if hovered {
+            border_col.lighten(0.03)
+        } else {
+            border_col
         };
 
         ctx.sr.draw_rounded_rect(
@@ -219,7 +227,7 @@ impl<M: Clone + 'static> TextInput<M> {
                 ((text_origin_x + cursor_x_snapped - scroll_snapped) * s).floor() / s;
             let cursor_draw_y = (ty * s).floor() / s;
             let cursor_h = (th * s).ceil() / s;
-            let cursor_w = 1.0;
+            let cursor_w = 2.0;
             if cursor_draw_x >= x + pad_l && cursor_draw_x <= x + w - pad_r {
                 ctx.sr.draw_rect(
                     cursor_draw_x,
@@ -474,5 +482,10 @@ pub fn handle_key(
     }
 
     state.get_or_default_mut::<TextInputState>(id).cursor = cursor;
-    if changed { Some(value) } else { None }
+    if changed {
+        cache_value(state, id, &value);
+        Some(value)
+    } else {
+        None
+    }
 }

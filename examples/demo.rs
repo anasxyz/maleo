@@ -31,19 +31,22 @@ impl App for MyApp {
                 .value(&self.address)
                 .on_change(|v| Action::UpdateAddress(v))
                 .placeholder("Enter address")
+                .font("mono")
                 .font_size(12.0)
                 .font_weight(500)
-                .border(Color::hex("#000000"), 1.0)
-                .border_radius(1.0)
+                .border(Color::hex("#000000"), 0.0)
+                .border_radius(15.0)
                 .margin(Margin::top(3.0))
-                .background(Color::hex("#ffffff"))
+                .background(Color::hex("#1f282d"))
                 .text_color(Color::hex("#000000"))
                 .width(percent(100.0)),
-            rect(Color::hex("#ffffff"))
-                .width(Val::Px(200.0))
-                .height(Val::Px(200.0))
-                .background(Color::hex("#1f282d"))
-                .border_radius(3.0)
+            {
+                if !self.address.is_empty() {
+                    text(&self.address, Color::hex("#ffffff"))
+                } else {
+                    text("No address", Color::hex("#ffffff"))
+                }
+            }
         ])
         .padding(Edges::all(5.0))
         .width(percent(100.0))
@@ -56,8 +59,12 @@ impl App for MyApp {
         }
         vec![]
     }
+
+    fn fonts(&self, fonts: &mut Fonts) {
+        fonts.add("mono", "JetBrainsMono Nerd Font Mono", 24.0);
+    }
 }
 
 fn main() {
-    MyApp::run(Settings::default().clear_color(Color::hex("#eeeeee")));
+    MyApp::run(Settings::default());
 }
