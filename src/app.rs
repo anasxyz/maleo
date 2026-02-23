@@ -266,6 +266,7 @@ impl<A: App> Runner<A> {
             self.fonts.as_mut().unwrap(),
             &mut self.state,
             &self.mouse,
+            self.scale_factor as f32,
         );
 
         {
@@ -352,7 +353,6 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
         );
 
         self.scale_factor = window.scale_factor();
-        println!("scale_factor: {}", self.scale_factor);
         self.gpu = Some(pollster::block_on(GpuContext::new(window.clone())));
         self.window = Some(window);
 

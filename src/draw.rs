@@ -24,6 +24,7 @@ pub struct DrawCtx<'a, M> {
     pub mouse: &'a MouseState,
     pub clip: Option<[f32; 4]>,
     pub actions: &'a mut Vec<M>,
+    pub scale_factor: f32,
 }
 
 pub fn draw<M: Clone + 'static>(
@@ -34,6 +35,7 @@ pub fn draw<M: Clone + 'static>(
     fonts: &mut Fonts,
     state: &mut StateStore,
     mouse: &MouseState,
+    scale_factor: f32,
 ) -> Vec<M> {
     let mut actions = Vec::new();
     let mut ctx = DrawCtx {
@@ -45,6 +47,7 @@ pub fn draw<M: Clone + 'static>(
         mouse,
         clip: None,
         actions: &mut actions,
+        scale_factor,
     };
     draw_element(element, &mut ctx);
     actions

@@ -66,6 +66,7 @@ impl<M: Clone + 'static> Row<M> {
                 mouse: ctx.mouse,
                 clip: child_clip,
                 actions: ctx.actions,
+                scale_factor: ctx.scale_factor,
             };
             draw_element(child, &mut child_ctx);
         }
@@ -266,6 +267,7 @@ impl<M: Clone + 'static> Column<M> {
                 mouse: ctx.mouse,
                 clip: child_clip,
                 actions: ctx.actions,
+                scale_factor: ctx.scale_factor,
             };
             draw_element(child, &mut child_ctx);
         }

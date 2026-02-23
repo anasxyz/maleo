@@ -145,26 +145,31 @@ impl<M: Clone + 'static> TextInput<M> {
         let text_area_w = w - pad_l - pad_r;
         let text_clip = Some([x + pad_l, y, x + w - pad_r, y + h]);
 
+        let s = ctx.scale_factor;
+        let text_origin_x = ((x + pad_l) * s).floor() / s;
+
         let cursor_pos = ctx.state.get_or_default::<TextInputState>(&self.id).cursor;
         let (cursor_x_abs, _) =
             ctx.fonts
                 .measure_sized(&value_str[..cursor_pos], font_id, size, self.font_weight);
+        let cursor_x_snapped = (cursor_x_abs * s).floor() / s;
         {
-            let s = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
-            if cursor_x_abs - s.scroll_offset > text_area_w - 2.0 {
-                s.scroll_offset = cursor_x_abs - text_area_w + 2.0;
+            let s_state = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
+            if cursor_x_abs - s_state.scroll_offset > text_area_w - 2.0 {
+                s_state.scroll_offset = cursor_x_abs - text_area_w + 2.0;
             }
-            if cursor_x_abs - s.scroll_offset < 0.0 {
-                s.scroll_offset = cursor_x_abs;
+            if cursor_x_abs - s_state.scroll_offset < 0.0 {
+                s_state.scroll_offset = cursor_x_abs;
             }
-            if s.scroll_offset < 0.0 {
-                s.scroll_offset = 0.0;
+            if s_state.scroll_offset < 0.0 {
+                s_state.scroll_offset = 0.0;
             }
         }
         let scroll = ctx
             .state
             .get_or_default::<TextInputState>(&self.id)
             .scroll_offset;
+        let scroll_snapped = (scroll * s).floor() / s;
 
         if value_str.is_empty() {
             let col = self
@@ -178,7 +183,7 @@ impl<M: Clone + 'static> TextInput<M> {
                 false,
                 TextAlign::Left,
                 &self.placeholder,
-                x + pad_l,
+                text_origin_x,
                 ty,
                 99999.0,
                 text_clip,
@@ -197,7 +202,7 @@ impl<M: Clone + 'static> TextInput<M> {
                 false,
                 TextAlign::Left,
                 value_str,
-                x + pad_l - scroll,
+                text_origin_x - scroll_snapped,
                 ty,
                 99999.0,
                 text_clip,
@@ -210,17 +215,15 @@ impl<M: Clone + 'static> TextInput<M> {
                 .style
                 .text_color
                 .unwrap_or(Color::new(0.7, 0.75, 1.0, 1.0));
-            // snap to nearest whole pixel so the cursor is always crisp.
-            // floor() rather than round() keeps the cursor just after the
-            // character it follows, which matches native text field behaviour
-            let cursor_draw_x = (x + pad_l + cursor_x_abs - scroll).floor();
-            let cursor_draw_y = ty.floor();
+            let cursor_draw_x = text_origin_x + cursor_x_snapped - scroll_snapped;
+            let cursor_draw_y = (ty * s).floor() / s;
             let cursor_h = th.ceil();
             if cursor_draw_x >= x + pad_l && cursor_draw_x <= x + w - pad_r {
+                let cursor_w = 2.0 / s;
                 ctx.sr.draw_rect(
                     cursor_draw_x,
                     cursor_draw_y,
-                    1.0,
+                    cursor_w,
                     cursor_h,
                     with_opacity(cursor_col.to_array(), self.style.opacity),
                     [0.0; 4],
