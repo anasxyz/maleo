@@ -41,6 +41,7 @@ fn build_taffy_node<M: Clone + 'static>(
         Element::Text(t) => t.layout_node(taffy, fonts),
         Element::Button(b) => b.layout_node(taffy, fonts),
         Element::TextInput(t) => t.layout_node(taffy, fonts),
+        Element::TextEditor(t) => t.layout_node(taffy, fonts),
         Element::Row(r) => r.layout_node(taffy, fonts),
         Element::Column(c) => c.layout_node(taffy, fonts),
     }
@@ -65,6 +66,7 @@ fn apply_layout<M: Clone + 'static>(
         Element::Text(t) => t.apply_layout(x, y, w, h),
         Element::Button(b) => b.apply_layout(x, y, w, h),
         Element::TextInput(t) => t.apply_layout(x, y, w, h),
+        Element::TextEditor(t) => t.apply_layout(x, y, w, h),
         Element::Row(r) => {
             r.apply_layout(x, y, w, h);
             let child_nodes = taffy.children(node).unwrap();

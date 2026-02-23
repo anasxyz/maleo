@@ -15,6 +15,7 @@ use crate::events::{Event, Key, MouseButton};
 use crate::layout::do_layout;
 use crate::state::StateStore;
 use crate::task::Task;
+use crate::widgets::text_editor as te;
 use crate::widgets::text_input as ti;
 use crate::{Color, Element, Fonts, GpuContext, ShadowRenderer, ShapeRenderer, TextRenderer};
 
@@ -354,7 +355,8 @@ impl<A: App> Runner<A> {
             self.window().request_redraw();
         }
 
-        self.focused_input_id = ti::find_focused(&self.state);
+        self.focused_input_id =
+            ti::find_focused(&self.state).or_else(|| te::find_focused(&self.state));
 
         // reset one-frame flags
         self.mouse.left_just_pressed = false;
@@ -523,37 +525,88 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
 
                     let mut consumed = false;
                     if let Some(id) = &self.focused_input_id.clone() {
-                        let current_value = ti::get_cached_value(&self.state, id);
                         let text = if pressed && !ctrl {
                             event.text.as_ref().map(|t| t.as_str()).unwrap_or("")
                         } else {
                             ""
                         };
-                        if let Some(new_value) =
-                            ti::handle_key(&mut self.state, id, &current_value, &bento_event, text)
-                        {
-                            consumed = true;
-                            if let Some(action) =
-                                ti::call_callback::<A::Action>(&self.state, id, new_value)
-                            {
-                                let tasks = self.app.update(action);
-                                self.spawn_tasks(tasks);
+
+                        // Determine which widget type is focused and route accordingly.
+                        // TextEditorState is stored under "te::<id>", so if that entry
+                        // is focused we're in a TextEditor; otherwise TextInput.
+                        let te_key = format!("te::{}", id);
+                        let is_text_editor = self
+                            .state
+                            .get_or_default::<crate::widgets::text_editor::TextEditorState>(&te_key)
+                            .focused;
+
+                        if !is_text_editor {
+                            let current_value = ti::get_cached_value(&self.state, id);
+                            if let Some(new_value) = ti::handle_key(
+                                &mut self.state,
+                                id,
+                                &current_value,
+                                &bento_event,
+                                text,
+                            ) {
+                                consumed = true;
+                                if let Some(action) =
+                                    ti::call_callback::<A::Action>(&self.state, id, new_value)
+                                {
+                                    let tasks = self.app.update(action);
+                                    self.spawn_tasks(tasks);
+                                }
+                                self.window().request_redraw();
+                            } else if matches!(
+                                bento_event,
+                                Event::KeyPressed {
+                                    key: Key::Left
+                                        | Key::Right
+                                        | Key::Home
+                                        | Key::End
+                                        | Key::Backspace
+                                        | Key::Delete,
+                                    ..
+                                }
+                            ) {
+                                consumed = true;
+                                self.window().request_redraw();
                             }
-                            self.window().request_redraw();
-                        } else if matches!(
-                            bento_event,
-                            Event::KeyPressed {
-                                key: Key::Left
-                                    | Key::Right
-                                    | Key::Home
-                                    | Key::End
-                                    | Key::Backspace
-                                    | Key::Delete,
-                                ..
+                        } else {
+                            // TextEditor
+                            let current_value = te::get_cached_value(&self.state, id);
+                            if let Some(new_value) = te::handle_key(
+                                &mut self.state,
+                                id,
+                                &current_value,
+                                &bento_event,
+                                text,
+                            ) {
+                                consumed = true;
+                                if let Some(action) =
+                                    te::call_callback::<A::Action>(&self.state, id, new_value)
+                                {
+                                    let tasks = self.app.update(action);
+                                    self.spawn_tasks(tasks);
+                                }
+                                self.window().request_redraw();
+                            } else if matches!(
+                                bento_event,
+                                Event::KeyPressed {
+                                    key: Key::Left
+                                        | Key::Right
+                                        | Key::Up
+                                        | Key::Down
+                                        | Key::Home
+                                        | Key::End
+                                        | Key::Backspace
+                                        | Key::Delete,
+                                    ..
+                                }
+                            ) {
+                                consumed = true;
+                                self.window().request_redraw();
                             }
-                        ) {
-                            consumed = true;
-                            self.window().request_redraw();
                         }
                     }
 

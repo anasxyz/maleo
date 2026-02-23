@@ -81,6 +81,7 @@ pub fn draw_element<M: Clone + 'static>(el: &mut Element<M>, ctx: &mut DrawCtx<M
         Element::Text(t) => t.draw(ctx),
         Element::Button(b) => b.draw(ctx),
         Element::TextInput(t) => t.draw(ctx),
+        Element::TextEditor(t) => t.draw(ctx),
         Element::Row(r) => r.draw(ctx),
         Element::Column(c) => c.draw(ctx),
     }

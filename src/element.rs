@@ -1,6 +1,8 @@
 use crate::Color;
 use crate::widgets::containers::{Column, Row};
-use crate::widgets::{button::Button, rect::Rect, text::Text, text_input::TextInput};
+use crate::widgets::{
+    button::Button, rect::Rect, text::Text, text_editor::TextEditor, text_input::TextInput,
+};
 
 // alignment
 
@@ -369,6 +371,7 @@ pub enum Element<M: Clone + 'static = ()> {
     Text(Text<M>),
     Button(Button<M>),
     TextInput(TextInput<M>),
+    TextEditor(TextEditor<M>),
     Row(Row<M>),
     Column(Column<M>),
 }
@@ -382,6 +385,7 @@ impl<M: Clone + 'static> Element<M> {
             Element::Rect(w) => Element::Rect(w.on_click(msg)),
             Element::Button(w) => Element::Button(w.on_click(msg)),
             Element::TextInput(w) => Element::TextInput(w.on_click(msg)),
+            Element::TextEditor(w) => Element::TextEditor(w.on_click(msg)),
             Element::Row(w) => Element::Row(w.on_click(msg)),
             Element::Column(w) => Element::Column(w.on_click(msg)),
             other => other,
@@ -392,6 +396,7 @@ impl<M: Clone + 'static> Element<M> {
             Element::Rect(w) => Element::Rect(w.on_hover(msg)),
             Element::Button(w) => Element::Button(w.on_hover(msg)),
             Element::TextInput(w) => Element::TextInput(w.on_hover(msg)),
+            Element::TextEditor(w) => Element::TextEditor(w.on_hover(msg)),
             Element::Row(w) => Element::Row(w.on_hover(msg)),
             Element::Column(w) => Element::Column(w.on_hover(msg)),
             other => other,
@@ -414,6 +419,7 @@ impl<M: Clone + 'static> Element<M> {
             Element::Text(w) => Element::Text(w.width(v)),
             Element::Button(w) => Element::Button(w.width(v)),
             Element::TextInput(w) => Element::TextInput(w.width(v)),
+            Element::TextEditor(w) => Element::TextEditor(w.width(v)),
             Element::Row(w) => Element::Row(w.width(v)),
             Element::Column(w) => Element::Column(w.width(v)),
             other => other,
@@ -424,6 +430,7 @@ impl<M: Clone + 'static> Element<M> {
             Element::Rect(w) => Element::Rect(w.height(v)),
             Element::Button(w) => Element::Button(w.height(v)),
             Element::TextInput(w) => Element::TextInput(w.height(v)),
+            Element::TextEditor(w) => Element::TextEditor(w.height(v)),
             Element::Row(w) => Element::Row(w.height(v)),
             Element::Column(w) => Element::Column(w.height(v)),
             other => other,
@@ -467,6 +474,7 @@ impl<M: Clone + 'static> Element<M> {
             Element::Text(w) => Element::Text(w.grow(v)),
             Element::Button(w) => Element::Button(w.grow(v)),
             Element::TextInput(w) => Element::TextInput(w.grow(v)),
+            Element::TextEditor(w) => Element::TextEditor(w.grow(v)),
             Element::Row(w) => Element::Row(w.grow(v)),
             Element::Column(w) => Element::Column(w.grow(v)),
             other => other,
@@ -491,6 +499,7 @@ impl<M: Clone + 'static> Element<M> {
         match self {
             Element::Rect(w) => Element::Rect(w.padding(e)),
             Element::TextInput(w) => Element::TextInput(w.padding(e)),
+            Element::TextEditor(w) => Element::TextEditor(w.padding(e)),
             Element::Row(w) => Element::Row(w.padding(e)),
             Element::Column(w) => Element::Column(w.padding(e)),
             other => other,
@@ -502,6 +511,7 @@ impl<M: Clone + 'static> Element<M> {
             Element::Text(w) => Element::Text(w.margin(e)),
             Element::Button(w) => Element::Button(w.margin(e)),
             Element::TextInput(w) => Element::TextInput(w.margin(e)),
+            Element::TextEditor(w) => Element::TextEditor(w.margin(e)),
             Element::Row(w) => Element::Row(w.margin(e)),
             Element::Column(w) => Element::Column(w.margin(e)),
             other => other,
@@ -527,6 +537,7 @@ impl<M: Clone + 'static> Element<M> {
             Element::Text(w) => Element::Text(w.align_self(a)),
             Element::Button(w) => Element::Button(w.align_self(a)),
             Element::TextInput(w) => Element::TextInput(w.align_self(a)),
+            Element::TextEditor(w) => Element::TextEditor(w.align_self(a)),
             Element::Row(w) => Element::Row(w.align_self(a)),
             Element::Column(w) => Element::Column(w.align_self(a)),
             other => other,
@@ -578,6 +589,7 @@ impl<M: Clone + 'static> Element<M> {
             Element::Rect(w) => Element::Rect(w.background(color)),
             Element::Button(w) => Element::Button(w.background(color)),
             Element::TextInput(w) => Element::TextInput(w.background(color)),
+            Element::TextEditor(w) => Element::TextEditor(w.background(color)),
             Element::Row(w) => Element::Row(w.background(color)),
             Element::Column(w) => Element::Column(w.background(color)),
             other => other,
@@ -588,6 +600,7 @@ impl<M: Clone + 'static> Element<M> {
             Element::Rect(w) => Element::Rect(w.border_radius(v)),
             Element::Button(w) => Element::Button(w.border_radius(v)),
             Element::TextInput(w) => Element::TextInput(w.border_radius(v)),
+            Element::TextEditor(w) => Element::TextEditor(w.border_radius(v)),
             Element::Row(w) => Element::Row(w.border_radius(v)),
             Element::Column(w) => Element::Column(w.border_radius(v)),
             other => other,
@@ -598,6 +611,7 @@ impl<M: Clone + 'static> Element<M> {
             Element::Rect(w) => Element::Rect(w.border(color, thickness)),
             Element::Button(w) => Element::Button(w.border(color, thickness)),
             Element::TextInput(w) => Element::TextInput(w.border(color, thickness)),
+            Element::TextEditor(w) => Element::TextEditor(w.border(color, thickness)),
             Element::Row(w) => Element::Row(w.border(color, thickness)),
             Element::Column(w) => Element::Column(w.border(color, thickness)),
             other => other,
@@ -609,6 +623,7 @@ impl<M: Clone + 'static> Element<M> {
             Element::Text(w) => Element::Text(w.opacity(v)),
             Element::Button(w) => Element::Button(w.opacity(v)),
             Element::TextInput(w) => Element::TextInput(w.opacity(v)),
+            Element::TextEditor(w) => Element::TextEditor(w.opacity(v)),
             Element::Row(w) => Element::Row(w.opacity(v)),
             Element::Column(w) => Element::Column(w.opacity(v)),
             other => other,
@@ -627,6 +642,7 @@ impl<M: Clone + 'static> Element<M> {
         match self {
             Element::Button(w) => Element::Button(w.text_color(color)),
             Element::TextInput(w) => Element::TextInput(w.text_color(color)),
+            Element::TextEditor(w) => Element::TextEditor(w.text_color(color)),
             other => other,
         }
     }
@@ -636,6 +652,7 @@ impl<M: Clone + 'static> Element<M> {
         match self {
             Element::Text(w) => Element::Text(w.font_size(size)),
             Element::TextInput(w) => Element::TextInput(w.font_size(size)),
+            Element::TextEditor(w) => Element::TextEditor(w.font_size(size)),
             other => other,
         }
     }
@@ -643,6 +660,7 @@ impl<M: Clone + 'static> Element<M> {
         match self {
             Element::Text(w) => Element::Text(w.font_weight(weight)),
             Element::TextInput(w) => Element::TextInput(w.font_weight(weight)),
+            Element::TextEditor(w) => Element::TextEditor(w.font_weight(weight)),
             other => other,
         }
     }
@@ -650,6 +668,7 @@ impl<M: Clone + 'static> Element<M> {
         match self {
             Element::Text(w) => Element::Text(w.font(name)),
             Element::TextInput(w) => Element::TextInput(w.font(name)),
+            Element::TextEditor(w) => Element::TextEditor(w.font(name)),
             other => other,
         }
     }
@@ -670,24 +689,28 @@ impl<M: Clone + 'static> Element<M> {
     pub fn value(self, v: &str) -> Self {
         match self {
             Element::TextInput(w) => Element::TextInput(w.value(v)),
+            Element::TextEditor(w) => Element::TextEditor(w.value(v)),
             other => other,
         }
     }
     pub fn placeholder(self, text: &str) -> Self {
         match self {
             Element::TextInput(w) => Element::TextInput(w.placeholder(text)),
+            Element::TextEditor(w) => Element::TextEditor(w.placeholder(text)),
             other => other,
         }
     }
     pub fn placeholder_color(self, color: Color) -> Self {
         match self {
             Element::TextInput(w) => Element::TextInput(w.placeholder_color(color)),
+            Element::TextEditor(w) => Element::TextEditor(w.placeholder_color(color)),
             other => other,
         }
     }
     pub fn on_change(self, f: impl Fn(String) -> M + 'static) -> Self {
         match self {
             Element::TextInput(w) => Element::TextInput(w.on_change(f)),
+            Element::TextEditor(w) => Element::TextEditor(w.on_change(f)),
             other => other,
         }
     }
@@ -713,6 +736,10 @@ pub fn button<M: Clone + 'static>(label: &str) -> Element<M> {
 
 pub fn text_input<M: Clone + 'static>(id: &str) -> Element<M> {
     Element::TextInput(TextInput::new(id))
+}
+
+pub fn text_editor<M: Clone + 'static>(id: &str) -> Element<M> {
+    Element::TextEditor(TextEditor::new(id))
 }
 
 pub fn row<M: Clone + 'static>(children: Vec<Element<M>>) -> Element<M> {
