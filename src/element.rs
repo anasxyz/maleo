@@ -294,6 +294,7 @@ pub struct Style {
     pub shadow_blur: f32,
     pub font: Option<String>,
     pub font_size: Option<f32>,
+    pub text_color: Option<Color>,
 }
 
 impl Default for Style {
@@ -332,6 +333,7 @@ impl Default for Style {
             shadow_blur: 0.0,
             font: None,
             font_size: None,
+            text_color: None,
         }
     }
 }
@@ -371,7 +373,6 @@ pub enum Element<M: Clone + 'static = ()> {
         id: String,
         placeholder: String,
         placeholder_color: Option<Color>,
-        text_color: Option<Color>,
         font: Option<String>,
         font_size: Option<f32>,
         value: Option<String>,
@@ -483,11 +484,8 @@ impl<M: Clone + 'static> Element<M> {
         self
     }
     pub fn text_color(mut self, color: Color) -> Self {
-        if let Element::TextInput {
-            ref mut text_color, ..
-        } = self
-        {
-            *text_color = Some(color);
+        if let Some(s) = self.style_mut() {
+            s.text_color = Some(color);
         }
         self
     }
@@ -664,7 +662,7 @@ impl<M: Clone + 'static> Element<M> {
         self
     }
 
-    // font — works on Text and TextInput
+    // font — works on any element
     pub fn font(mut self, name: &str) -> Self {
         match &mut self {
             Element::Text { font, .. } => {
@@ -673,7 +671,11 @@ impl<M: Clone + 'static> Element<M> {
             Element::TextInput { font, .. } => {
                 *font = Some(name.to_string());
             }
-            _ => {}
+            other => {
+                if let Some(s) = other.style_mut() {
+                    s.font = Some(name.to_string());
+                }
+            }
         }
         self
     }
@@ -685,7 +687,11 @@ impl<M: Clone + 'static> Element<M> {
             Element::TextInput { font_size, .. } => {
                 *font_size = Some(size);
             }
-            _ => {}
+            other => {
+                if let Some(s) = other.style_mut() {
+                    s.font_size = Some(size);
+                }
+            }
         }
         self
     }
@@ -761,7 +767,6 @@ pub fn text_input<M: Clone + 'static>(id: &str) -> Element<M> {
         id: id.to_string(),
         placeholder: String::new(),
         placeholder_color: None,
-        text_color: None,
         font: None,
         font_size: None,
         value: None,

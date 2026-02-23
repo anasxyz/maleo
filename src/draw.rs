@@ -246,6 +246,9 @@ fn draw_clipped<M: Clone + 'static>(
             let (tw, th) = fonts.measure(label, font_id);
             let tx = *resolved_x + (*resolved_w - tw) / 2.0;
             let ty = *resolved_y + (*resolved_h - th) / 2.0;
+            let label_color = style
+                .text_color
+                .unwrap_or(Color::new(0.92, 0.92, 0.95, 1.0));
             tr.draw(
                 &mut fonts.font_system,
                 family,
@@ -258,7 +261,7 @@ fn draw_clipped<M: Clone + 'static>(
                 ty,
                 *resolved_w,
                 clip,
-                Color::new(0.92, 0.92, 0.95, 1.0),
+                with_opacity(label_color.to_array(), style.opacity).into(),
             );
 
             check_interactions(
@@ -280,7 +283,6 @@ fn draw_clipped<M: Clone + 'static>(
             id,
             placeholder,
             placeholder_color,
-            text_color,
             font,
             font_size,
             value,
@@ -317,6 +319,7 @@ fn draw_clipped<M: Clone + 'static>(
             }
             let focused = state.get_or_default::<ti::TextInputState>(id).focused;
 
+            // background + border
             let default_bg = if focused {
                 Color::new(0.18, 0.18, 0.22, 1.0)
             } else if hovered {
@@ -375,6 +378,31 @@ fn draw_clipped<M: Clone + 'static>(
                 y + (h - th) / 2.0
             };
 
+            // visible area for text
+            let text_area_w = w - pad_l - pad_r;
+            // clip rect that hides text outside the input bounds
+            let text_clip = Some([x + pad_l, y, x + w - pad_r, y + h]);
+
+            // update scroll offset to keep cursor visible
+            let cursor_pos = state.get_or_default::<ti::TextInputState>(id).cursor;
+            let (cursor_x_abs, _) = fonts.measure_sized(&value_str[..cursor_pos], font_id, size);
+            {
+                let s = state.get_or_default_mut::<ti::TextInputState>(id);
+                // scroll right if cursor is past the right edge
+                if cursor_x_abs - s.scroll_offset > text_area_w - 2.0 {
+                    s.scroll_offset = cursor_x_abs - text_area_w + 2.0;
+                }
+                // scroll left if cursor is before the left edge
+                if cursor_x_abs - s.scroll_offset < 0.0 {
+                    s.scroll_offset = cursor_x_abs;
+                }
+                // never scroll past the start
+                if s.scroll_offset < 0.0 {
+                    s.scroll_offset = 0.0;
+                }
+            }
+            let scroll = state.get_or_default::<ti::TextInputState>(id).scroll_offset;
+
             if value_str.is_empty() {
                 let col = placeholder_color.unwrap_or(Color::new(0.45, 0.45, 0.5, 1.0));
                 tr.draw(
@@ -387,12 +415,15 @@ fn draw_clipped<M: Clone + 'static>(
                     placeholder,
                     x + pad_l,
                     ty,
-                    w - pad_l - pad_r,
-                    clip,
+                    text_area_w,
+                    text_clip,
                     with_opacity(col.to_array(), style.opacity).into(),
                 );
             } else {
-                let col = text_color.unwrap_or(Color::new(0.92, 0.92, 0.95, 1.0));
+                let col = style
+                    .text_color
+                    .unwrap_or(Color::new(0.92, 0.92, 0.95, 1.0));
+                // draw text offset left by scroll amount so cursor stays in view
                 tr.draw(
                     &mut fonts.font_system,
                     family,
@@ -401,27 +432,29 @@ fn draw_clipped<M: Clone + 'static>(
                     false,
                     TextAlign::Left,
                     value_str,
-                    x + pad_l,
+                    x + pad_l - scroll,
                     ty,
-                    w - pad_l - pad_r,
-                    clip,
+                    99999.0,
+                    text_clip,
                     with_opacity(col.to_array(), style.opacity).into(),
                 );
             }
 
             if focused {
-                let cursor = state.get_or_default::<ti::TextInputState>(id).cursor;
-                let (cursor_x, _) = fonts.measure_sized(&value_str[..cursor], font_id, size);
-                let cursor_col = text_color.unwrap_or(Color::new(0.7, 0.75, 1.0, 1.0));
-                sr.draw_rect(
-                    x + pad_l + cursor_x,
-                    ty,
-                    1.5,
-                    th,
-                    with_opacity(cursor_col.to_array(), style.opacity),
-                    [0.0; 4],
-                    0.0,
-                );
+                let cursor_col = style.text_color.unwrap_or(Color::new(0.7, 0.75, 1.0, 1.0));
+                let cursor_draw_x = x + pad_l + cursor_x_abs - scroll;
+                // only draw cursor if it's within the visible area
+                if cursor_draw_x >= x + pad_l && cursor_draw_x <= x + w - pad_r {
+                    sr.draw_rect(
+                        cursor_draw_x,
+                        ty,
+                        1.5,
+                        th,
+                        with_opacity(cursor_col.to_array(), style.opacity),
+                        [0.0; 4],
+                        0.0,
+                    );
+                }
             }
 
             check_interactions(

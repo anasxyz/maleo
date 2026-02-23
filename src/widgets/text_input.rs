@@ -7,6 +7,7 @@ use crate::state::StateStore;
 pub struct TextInputState {
     pub focused: bool,
     pub cursor: usize,
+    pub scroll_offset: f32, // pixels scrolled left to keep cursor visible
 }
 
 // wraps the on_change closure so it can be stored as Box<dyn Any>
@@ -58,14 +59,22 @@ pub fn handle_key(
     text: &str, // actual character from OS, already shift/locale aware
 ) -> Option<String> {
     let focused = state.get_or_default::<TextInputState>(id).focused;
-    if !focused { return None; }
+    if !focused {
+        return None;
+    }
 
     let mut value = current_value.to_string();
-    let mut cursor = state.get_or_default::<TextInputState>(id).cursor.min(value.len());
+    let mut cursor = state
+        .get_or_default::<TextInputState>(id)
+        .cursor
+        .min(value.len());
     let mut changed = false;
 
     match event {
-        Event::KeyPressed { key: Key::Backspace, .. } => {
+        Event::KeyPressed {
+            key: Key::Backspace,
+            ..
+        } => {
             if cursor > 0 {
                 if let Some((i, _)) = value[..cursor].char_indices().next_back() {
                     value.remove(i);
@@ -74,7 +83,9 @@ pub fn handle_key(
                 }
             }
         }
-        Event::KeyPressed { key: Key::Delete, .. } => {
+        Event::KeyPressed {
+            key: Key::Delete, ..
+        } => {
             if cursor < value.len() {
                 value.remove(cursor);
                 changed = true;
@@ -87,15 +98,23 @@ pub fn handle_key(
                 }
             }
         }
-        Event::KeyPressed { key: Key::Right, .. } => {
+        Event::KeyPressed {
+            key: Key::Right, ..
+        } => {
             if cursor < value.len() {
-                cursor = value[cursor..].char_indices().nth(1)
+                cursor = value[cursor..]
+                    .char_indices()
+                    .nth(1)
                     .map(|(i, _)| cursor + i)
                     .unwrap_or(value.len());
             }
         }
-        Event::KeyPressed { key: Key::Home, .. } => { cursor = 0; }
-        Event::KeyPressed { key: Key::End,  .. } => { cursor = value.len(); }
+        Event::KeyPressed { key: Key::Home, .. } => {
+            cursor = 0;
+        }
+        Event::KeyPressed { key: Key::End, .. } => {
+            cursor = value.len();
+        }
         Event::KeyPressed { .. } => {
             if !text.is_empty() && text != "\r" && text != "\n" && text != "\r\n" {
                 value.insert_str(cursor, text);

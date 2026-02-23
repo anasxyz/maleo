@@ -121,8 +121,15 @@ impl MyApp {
                     .placeholder("New task or search...")
                     .value(&self.search)
                     .on_change(|v| Action::SearchChanged(v))
+                    .font_size(50.0)
+                    .font("mono")
+                    .text_color(Color::hex("#333333"))
+                    .background(Color::hex("#FFFFFF"))
+                    .border(Color::hex("#888899"), 1.0)
+                    .border_radius(1.0)
                     .grow(1.0),
                 button("Add")
+                    .text_color(Color::BLACK)
                     .background(Color::hex("#44bb77"))
                     .border_radius(6.0)
                     .on_click(Action::AddItem)
@@ -157,6 +164,7 @@ impl MyApp {
                         .padding(Edges::all(10.0))
                         .gap(8.0)
                         .width(Val::Percent(100.0))
+                                .overflow_hidden()
                         .background(if hovered {
                             Color::hex("#2a2a3e")
                         } else {
@@ -204,6 +212,10 @@ impl MyApp {
         .align_x(Align::Center)
         .width(Val::Percent(100.0))
         .grow(1.0)
+    }
+
+    fn fonts(&self, fonts: &mut Fonts) {
+        fonts.add("mono", "JetBrainsMono Nerd Font Mono", 24.0);
     }
 }
 
