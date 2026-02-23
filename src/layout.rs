@@ -48,6 +48,16 @@ fn build_taffy_node<M: Clone + 'static>(
                         width: Dimension::Length(w),
                         height: Dimension::Length(h),
                     },
+                    // only allow shrinking below natural width when grow is set
+                    // otherwise short texts like "4 tasks" would wrap unnecessarily
+                    min_size: taffy::geometry::Size {
+                        width: if style.grow > 0.0 {
+                            Dimension::Length(0.0)
+                        } else {
+                            Dimension::Auto
+                        },
+                        height: Dimension::Auto,
+                    },
                     margin: margin_to_rect_lpa(&style.margin),
                     flex_grow: style.grow,
                     flex_shrink: 1.0,
@@ -81,9 +91,16 @@ fn build_taffy_node<M: Clone + 'static>(
                             other => val_to_dimension(other),
                         },
                     },
+                    min_size: taffy::geometry::Size {
+                        width: match &style.width {
+                            Val::Auto => Dimension::Length(natural_w),
+                            other => val_to_dimension(other),
+                        },
+                        height: Dimension::Auto,
+                    },
                     margin: margin_to_rect_lpa(&style.margin),
                     flex_grow: style.grow,
-                    flex_shrink: 1.0,
+                    flex_shrink: 0.0,
                     align_self: style.align_self.and_then(align_to_self),
                     ..Default::default()
                 })
@@ -172,9 +189,12 @@ fn apply_layout<M: Clone + 'static>(
 
     match element {
         Element::Empty => {}
-        Element::Text { style, .. } => {
+        Element::Text {
+            style, resolved_w, ..
+        } => {
             style.x = x;
             style.y = y;
+            *resolved_w = w;
         }
         Element::Rect {
             style,

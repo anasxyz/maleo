@@ -135,22 +135,27 @@ fn draw_clipped<M: Clone + 'static>(
             text_align,
             style,
             interactions,
+            resolved_w,
         } => {
-            if is_outside(style.x, style.y, 1.0, 1.0, clip) {
+            if is_outside(style.x, style.y, *resolved_w, 999.0, clip) {
                 return;
             }
             let font_id = fonts.resolve(font.as_deref()).unwrap();
             let family = fonts.get(font_id).family.clone();
             let size = font_size.unwrap_or(fonts.get(font_id).size);
-            let width = if *text_align != TextAlign::Left {
-                let (w, _) = match font_size {
-                    Some(s) => fonts.measure_sized(content, font_id, *s),
-                    None => fonts.measure(content, font_id),
-                };
-                w + 2.0
-            } else {
-                f32::MAX
-            };
+
+            // clip to resolved width intersected with parent clip
+            let x2 = style.x + *resolved_w;
+            let text_clip = Some(match clip {
+                Some([cx, cy, cx2, cy2]) => [
+                    style.x.max(cx),
+                    style.y.max(cy),
+                    x2.min(cx2),
+                    (style.y + 9999.0).min(cy2),
+                ],
+                None => [style.x, style.y, x2, style.y + 9999.0],
+            });
+
             tr.draw(
                 &mut fonts.font_system,
                 family,
@@ -161,11 +166,10 @@ fn draw_clipped<M: Clone + 'static>(
                 content,
                 style.x,
                 style.y,
-                width,
-                clip,
+                99999.0,
+                text_clip,
                 *color,
             );
-            // text doesn't have a resolved size stored — skip interactions for now
             let _ = interactions;
         }
 
@@ -328,22 +332,19 @@ fn draw_clipped<M: Clone + 'static>(
                 Color::new(0.13, 0.13, 0.17, 1.0)
             };
             let bg = style.background.unwrap_or(default_bg);
-            let default_border = if focused {
-                Color::new(0.4, 0.5, 0.9, 1.0)
+            // if user explicitly set a border color, use their values exactly (thickness can be 0)
+            // otherwise fall back to focus-aware defaults
+            let (border_col, border_w) = if let Some(col) = style.border_color {
+                (col, style.border_thickness)
             } else {
-                Color::new(0.3, 0.3, 0.35, 1.0)
+                let default_col = if focused {
+                    Color::new(0.4, 0.5, 0.9, 1.0)
+                } else {
+                    Color::new(0.3, 0.3, 0.35, 1.0)
+                };
+                (default_col, 1.5)
             };
-            let border_col = style.border_color.unwrap_or(default_border);
-            let border_w = if style.border_thickness > 0.0 {
-                style.border_thickness
-            } else {
-                1.5
-            };
-            let radius = if style.border_radius > 0.0 {
-                style.border_radius
-            } else {
-                4.0
-            };
+            let radius = style.border_radius;
             sr.draw_rounded_rect(
                 x,
                 y,
@@ -351,7 +352,11 @@ fn draw_clipped<M: Clone + 'static>(
                 h,
                 radius,
                 with_opacity(bg.to_array(), style.opacity),
-                with_opacity(border_col.to_array(), style.opacity),
+                if border_w > 0.0 {
+                    with_opacity(border_col.to_array(), style.opacity)
+                } else {
+                    [0.0; 4]
+                },
                 border_w,
             );
 
@@ -415,7 +420,7 @@ fn draw_clipped<M: Clone + 'static>(
                     placeholder,
                     x + pad_l,
                     ty,
-                    text_area_w,
+                    99999.0,
                     text_clip,
                     with_opacity(col.to_array(), style.opacity).into(),
                 );

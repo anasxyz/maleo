@@ -359,6 +359,7 @@ pub enum Element<M: Clone + 'static = ()> {
         text_align: TextAlign,
         style: Style,
         interactions: Interactions<M>,
+        resolved_w: f32,
     },
     Button {
         label: String,
@@ -747,6 +748,7 @@ pub fn text<M: Clone + 'static>(content: &str, color: Color) -> Element<M> {
         text_align: TextAlign::Left,
         style: Style::default(),
         interactions: Interactions::default(),
+        resolved_w: 0.0,
     }
 }
 

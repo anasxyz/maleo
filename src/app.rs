@@ -512,27 +512,16 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                         } else {
                             ""
                         };
-                        eprintln!(
-                            "KEY: focused_input_id={:?} pressed={}",
-                            self.focused_input_id, pressed
-                        );
-                        eprintln!(
-                            "  id={} current_value={:?} text={:?}",
-                            id, current_value, text
-                        );
                         if let Some(new_value) =
                             ti::handle_key(&mut self.state, id, &current_value, &bento_event, text)
                         {
-                            eprintln!("  new_value={:?}", new_value);
                             consumed = true;
                             if let Some(action) =
                                 ti::call_callback::<A::Action>(&self.state, id, new_value)
                             {
-                                eprintln!("  callback fired");
                                 let tasks = self.app.update(action);
                                 self.spawn_tasks(tasks);
                             } else {
-                                eprintln!("  callback returned None");
                             }
                             self.window().request_redraw();
                         } else if matches!(
