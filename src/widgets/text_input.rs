@@ -220,7 +220,7 @@ impl<M: Clone + 'static> TextInput<M> {
                 ctx.sr.draw_rect(
                     cursor_draw_x,
                     cursor_draw_y,
-                    2.0,
+                    1.0,
                     cursor_h,
                     with_opacity(cursor_col.to_array(), self.style.opacity),
                     [0.0; 4],

@@ -1,13 +1,13 @@
-use wgpu;
 use std::mem;
+use wgpu;
 
 // one instance per shadow, passed directly to the vertex shader
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct ShadowInstance {
-    rect: [f32; 4],    // x, y, w, h
-    color: [f32; 4],   // r, g, b, a
-    params: [f32; 4],  // corner_radius, blur, offset_x, offset_y
+    rect: [f32; 4],   // x, y, w, h
+    color: [f32; 4],  // r, g, b, a
+    params: [f32; 4], // corner_radius, blur, offset_x, offset_y
 }
 
 #[repr(C)]
@@ -28,7 +28,13 @@ pub struct ShadowRenderer {
 }
 
 impl ShadowRenderer {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat, width: f32, height: f32) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        width: f32,
+        height: f32,
+    ) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shadow Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("../../shaders/shadow.wgsl").into()),
@@ -41,7 +47,10 @@ impl ShadowRenderer {
             mapped_at_creation: false,
         });
 
-        let screen_uniform = ScreenUniform { size: [width, height], _pad: [0.0; 2] };
+        let screen_uniform = ScreenUniform {
+            size: [width, height],
+            _pad: [0.0; 2],
+        };
         queue.write_buffer(&screen_buffer, 0, bytemuck::bytes_of(&screen_uniform));
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -126,7 +135,7 @@ impl ShadowRenderer {
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState {
-                count: 4,
+                count: 1,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
@@ -152,7 +161,18 @@ impl ShadowRenderer {
         }
     }
 
-    pub fn draw_shadow(&mut self, x: f32, y: f32, w: f32, h: f32, color: [f32; 4], corner_radius: f32, blur: f32, offset_x: f32, offset_y: f32) {
+    pub fn draw_shadow(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        color: [f32; 4],
+        corner_radius: f32,
+        blur: f32,
+        offset_x: f32,
+        offset_y: f32,
+    ) {
         self.instances.push(ShadowInstance {
             rect: [x, y, w, h],
             color,
@@ -167,7 +187,10 @@ impl ShadowRenderer {
     pub fn resize(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, width: f32, height: f32) {
         self.screen_width = width;
         self.screen_height = height;
-        let screen_uniform = ScreenUniform { size: [width, height], _pad: [0.0; 2] };
+        let screen_uniform = ScreenUniform {
+            size: [width, height],
+            _pad: [0.0; 2],
+        };
         queue.write_buffer(&self.screen_buffer, 0, bytemuck::bytes_of(&screen_uniform));
     }
 
@@ -177,7 +200,9 @@ impl ShadowRenderer {
         queue: &wgpu::Queue,
         pass: &mut wgpu::RenderPass<'pass>,
     ) {
-        if self.instances.is_empty() { return; }
+        if self.instances.is_empty() {
+            return;
+        }
 
         let data = bytemuck::cast_slice(&self.instances);
         if data.len() as u64 > self.instance_buffer.size() {

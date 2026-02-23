@@ -34,10 +34,10 @@ impl App for MyApp {
                 .font_size(12.0)
                 .font_weight(600)
                 .border(Color::hex("#000000"), 2.0)
-                .border_radius(3.0)
+                .border_radius(20.0)
                 .margin(Margin::top(3.0))
                 .background(Color::hex("#ffffff"))
-                .text_color(Color::hex("#1f282d"))
+                .text_color(Color::hex("#000000"))
                 .width(percent(100.0)),
             rect(Color::hex("#ffffff"))
                 .width(Val::Px(200.0))

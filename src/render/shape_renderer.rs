@@ -95,11 +95,8 @@ impl ShapeRenderer {
                 ..Default::default()
             },
             depth_stencil: None,
-            // MSAA disabled: analytical AA in the fragment shader is strictly
-            // better for SDF shapes — MSAA only samples the geometric quad edge,
-            // not the SDF edge where it actually matters.
             multisample: wgpu::MultisampleState {
-                count: 4,
+                count: 1,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
@@ -222,7 +219,7 @@ impl ShapeRenderer {
         );
     }
 
-    // internal push helpers 
+    // internal push helpers
 
     #[inline(always)]
     fn push(
@@ -275,7 +272,7 @@ impl ShapeRenderer {
         });
     }
 
-    // render 
+    // render
 
     pub fn render<'pass>(
         &'pass mut self,

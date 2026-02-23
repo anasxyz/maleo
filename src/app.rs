@@ -252,7 +252,7 @@ impl<A: App> Runner<A> {
             Err(_) => return,
         };
 
-        let (mut encoder, finisher, view, msaa_view) = frame.begin();
+        let (mut encoder, finisher, view) = frame.begin();
         let (width, height) = self.logical_size();
 
         let mut tree = self.app.view();
@@ -274,8 +274,8 @@ impl<A: App> Runner<A> {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &msaa_view,
-                    resolve_target: Some(&view),
+                    view: &view,
+                    resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
                             r: clear.r as f64,
@@ -352,6 +352,7 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
         );
 
         self.scale_factor = window.scale_factor();
+        println!("scale_factor: {}", self.scale_factor);
         self.gpu = Some(pollster::block_on(GpuContext::new(window.clone())));
         self.window = Some(window);
 
