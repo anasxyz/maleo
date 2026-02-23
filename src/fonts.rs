@@ -1,4 +1,4 @@
-use glyphon::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, fontdb};
+use glyphon::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, Weight, fontdb};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -12,13 +12,13 @@ pub struct FontEntry {
 pub struct Fonts {
     pub(crate) font_system: FontSystem,
     entries: Vec<FontEntry>,
-    measure_cache: HashMap<(usize, String, u32), (f32, f32)>,
+    // cache key includes weight so heavier fonts don't alias to lighter measurements
+    measure_cache: HashMap<(usize, String, u32, u16), (f32, f32)>,
     name_to_id: HashMap<String, FontId>,
     pub(crate) default: Option<FontId>,
     fonts_loaded: bool,
 }
 
-// returned by add() so the user can chain .default()
 pub struct FontBuilder<'a> {
     fonts: &'a mut Fonts,
     id: FontId,
@@ -46,7 +46,6 @@ impl Fonts {
     }
 
     pub fn add(&mut self, name: &str, family: &str, size: f32) -> FontBuilder<'_> {
-        // load system fonts once on first add 
         if !self.fonts_loaded {
             self.fonts_loaded = true;
             self.font_system.db_mut().load_system_fonts();
@@ -77,7 +76,6 @@ impl Fonts {
         self.default
     }
 
-    // resolves a font name to an id, falling back to default
     pub fn resolve(&self, name: Option<&str>) -> Option<FontId> {
         match name {
             Some(n) => self.get_by_name(n).or(self.default),
@@ -85,13 +83,18 @@ impl Fonts {
         }
     }
 
+    // measure at the font's default size and weight 400
+    // used by widgets (button, text) that don't vary weight at measure time
     pub fn measure(&mut self, text: &str, id: FontId) -> (f32, f32) {
         let size = self.entries[id.0].size;
-        self.measure_sized(text, id, size)
+        self.measure_sized(text, id, size, 400)
     }
 
-    pub fn measure_sized(&mut self, text: &str, id: FontId, size: f32) -> (f32, f32) {
-        let key = (id.0, text.to_string(), (size * 10.0) as u32);
+    // measure at an explicit size and weight
+    // weight must match the weight used when actually rendering the text,
+    // otherwise the cursor / layout will be off for non 400 weights
+    pub fn measure_sized(&mut self, text: &str, id: FontId, size: f32, weight: u16) -> (f32, f32) {
+        let key = (id.0, text.to_string(), (size * 10.0) as u32, weight);
         if let Some(&cached) = self.measure_cache.get(&key) {
             return cached;
         }
@@ -102,7 +105,9 @@ impl Fonts {
         buffer.set_text(
             &mut self.font_system,
             text,
-            &Attrs::new().family(Family::Name(family.as_str())),
+            &Attrs::new()
+                .family(Family::Name(family.as_str()))
+                .weight(Weight(weight)),
             Shaping::Advanced,
         );
         buffer.shape_until_scroll(&mut self.font_system, false);

@@ -1,308 +1,132 @@
-use crate::{
-    Color, Element, Fonts, Overflow, ShadowRenderer, ShapeRenderer, TextAlign, TextRenderer,
-};
+use crate::state::StateStore;
+use crate::{Element, Fonts, ShadowRenderer, ShapeRenderer, TextRenderer};
 
-pub fn draw<M: Clone + 'static>(
-    element: &mut Element<M>,
-    shape_renderer: &mut ShapeRenderer,
-    shadow_renderer: &mut ShadowRenderer,
-    text_renderer: &mut TextRenderer,
-    fonts: &mut Fonts,
-    mouse_x: f32,
-    mouse_y: f32,
-    left_just_pressed: bool,
-) -> Vec<M> {
-    let mut actions: Vec<M> = Vec::new();
-    draw_clipped(
-        element,
-        shape_renderer,
-        shadow_renderer,
-        text_renderer,
-        fonts,
-        mouse_x,
-        mouse_y,
-        left_just_pressed,
-        None,
-        &mut actions,
-    );
-    actions
+#[derive(Clone, Copy, PartialEq)]
+pub enum Cursor {
+    Default,
+    Text,
+    Pointer,
+    Crosshair,
+    Move,
+    ResizeNS,
+    ResizeEW,
+    NotAllowed,
+    Grab,
+    Grabbing,
+    Wait,
 }
 
-fn draw_clipped<M: Clone + 'static>(
+// all mouse state in one place
+pub struct MouseState {
+    pub x: f32,
+    pub y: f32,
+    pub left_pressed: bool,
+    pub left_just_pressed: bool,
+    pub left_just_released: bool,
+    pub right_pressed: bool,
+    pub right_just_pressed: bool,
+    pub middle_pressed: bool,
+    pub middle_just_pressed: bool,
+    pub left_click_count: u32, // 1 = single, 2 = double, 3 = triple
+    pub left_click_x: f32,
+    pub left_click_y: f32,
+}
+
+// everything a widget needs to draw itself
+pub struct DrawCtx<'a, M> {
+    pub sr: &'a mut ShapeRenderer,
+    pub shadow: &'a mut ShadowRenderer,
+    pub tr: &'a mut TextRenderer,
+    pub fonts: &'a mut Fonts,
+    pub state: &'a mut StateStore,
+    pub mouse: &'a MouseState,
+    pub clip: Option<[f32; 4]>,
+    pub actions: &'a mut Vec<M>,
+    pub scale_factor: f32,
+    pub cursor: &'a mut Option<Cursor>,
+}
+
+pub fn draw<M: Clone + 'static>(
     element: &mut Element<M>,
     sr: &mut ShapeRenderer,
     shadow: &mut ShadowRenderer,
     tr: &mut TextRenderer,
     fonts: &mut Fonts,
-    mouse_x: f32,
-    mouse_y: f32,
-    left_just_pressed: bool,
-    clip: Option<[f32; 4]>,
-    actions: &mut Vec<M>,
-) {
-    match element {
+    state: &mut StateStore,
+    mouse: &MouseState,
+    scale_factor: f32,
+) -> (Vec<M>, Option<Cursor>) {
+    let mut actions = Vec::new();
+    let mut cursor = None;
+    let mut ctx = DrawCtx {
+        sr,
+        shadow,
+        tr,
+        fonts,
+        state,
+        mouse,
+        clip: None,
+        actions: &mut actions,
+        scale_factor,
+        cursor: &mut cursor,
+    };
+    draw_element(element, &mut ctx);
+    (actions, cursor)
+}
+
+pub fn draw_element<M: Clone + 'static>(el: &mut Element<M>, ctx: &mut DrawCtx<M>) {
+    match el {
         Element::Empty => {}
-
-        Element::Rect {
-            color,
-            style,
-            resolved_w,
-            resolved_h,
-        } => {
-            if is_outside(style.x, style.y, *resolved_w, *resolved_h, clip) {
-                return;
-            }
-            draw_shadow(shadow, style.x, style.y, *resolved_w, *resolved_h, style);
-            let border = style.border_color.unwrap_or(Color::TRANSPARENT).to_array();
-            draw_shape(
-                sr,
-                style.x,
-                style.y,
-                *resolved_w,
-                *resolved_h,
-                with_opacity(color.to_array(), style.opacity),
-                style.border_radius,
-                with_opacity(border, style.opacity),
-                style.border_thickness,
-                clip,
-            );
-        }
-
-        Element::Text {
-            content,
-            color,
-            font,
-            font_size,
-            font_weight,
-            italic,
-            text_align,
-            style,
-        } => {
-            if is_outside(style.x, style.y, 1.0, 1.0, clip) {
-                return;
-            }
-            let font_id = fonts.resolve(font.as_deref()).unwrap();
-            let family = fonts.get(font_id).family.clone();
-            let size = font_size.unwrap_or(fonts.get(font_id).size);
-            let width = if *text_align != TextAlign::Left {
-                let (w, _) = match font_size {
-                    Some(s) => fonts.measure_sized(content, font_id, *s),
-                    None => fonts.measure(content, font_id),
-                };
-                w + 2.0
-            } else {
-                f32::MAX
-            };
-            tr.draw(
-                &mut fonts.font_system,
-                family,
-                size,
-                *font_weight,
-                *italic,
-                *text_align,
-                content,
-                style.x,
-                style.y,
-                width,
-                clip,
-                *color,
-            );
-        }
-
-        Element::Button {
-            label,
-            style,
-            on_click,
-            resolved_x,
-            resolved_y,
-            resolved_w,
-            resolved_h,
-        } => {
-            if is_outside(*resolved_x, *resolved_y, *resolved_w, *resolved_h, clip) {
-                return;
-            }
-
-            let hovered = mouse_x >= *resolved_x
-                && mouse_x <= *resolved_x + *resolved_w
-                && mouse_y >= *resolved_y
-                && mouse_y <= *resolved_y + *resolved_h;
-            let clicked = hovered && left_just_pressed;
-
-            let bg = if clicked {
-                style
-                    .background
-                    .map(|c| {
-                        Color::new(
-                            (c.r + 0.15).min(1.0),
-                            (c.g + 0.15).min(1.0),
-                            (c.b + 0.15).min(1.0),
-                            1.0,
-                        )
-                    })
-                    .unwrap_or(Color::new(0.5, 0.5, 0.6, 1.0))
-            } else if hovered {
-                style
-                    .background
-                    .map(|c| {
-                        Color::new(
-                            (c.r + 0.08).min(1.0),
-                            (c.g + 0.08).min(1.0),
-                            (c.b + 0.08).min(1.0),
-                            1.0,
-                        )
-                    })
-                    .unwrap_or(Color::new(0.35, 0.35, 0.45, 1.0))
-            } else {
-                style
-                    .background
-                    .unwrap_or(Color::new(0.25, 0.25, 0.35, 1.0))
-            };
-
-            draw_shadow(
-                shadow,
-                *resolved_x,
-                *resolved_y,
-                *resolved_w,
-                *resolved_h,
-                style,
-            );
-            let border = style.border_color.unwrap_or(Color::TRANSPARENT).to_array();
-            draw_shape(
-                sr,
-                *resolved_x,
-                *resolved_y,
-                *resolved_w,
-                *resolved_h,
-                with_opacity(bg.to_array(), style.opacity),
-                style.border_radius,
-                with_opacity(border, style.opacity),
-                style.border_thickness,
-                clip,
-            );
-
-            let font_id = fonts.default_id().unwrap();
-            let family = fonts.get(font_id).family.clone(); // clone before font_system borrow
-            let size = fonts.get(font_id).size;
-            let (tw, th) = fonts.measure(label, font_id);
-            let tx = *resolved_x + (*resolved_w - tw) / 2.0;
-            let ty = *resolved_y + (*resolved_h - th) / 2.0;
-            tr.draw(
-                &mut fonts.font_system,
-                family,
-                size,
-                400,
-                false,
-                TextAlign::Left,
-                label,
-                tx,
-                ty,
-                *resolved_w,
-                clip,
-                Color::new(0.92, 0.92, 0.95, 1.0),
-            );
-
-            if clicked {
-                if let Some(action) = on_click {
-                    actions.push(action.clone());
-                }
-            }
-        }
-
-        Element::Row {
-            style,
-            children,
-            resolved_w,
-            resolved_h,
-        } => {
-            draw_shadow(shadow, style.x, style.y, *resolved_w, *resolved_h, style);
-            if let Some(bg) = style.background {
-                let border = style.border_color.unwrap_or(Color::TRANSPARENT).to_array();
-                draw_shape(
-                    sr,
-                    style.x,
-                    style.y,
-                    *resolved_w,
-                    *resolved_h,
-                    with_opacity(bg.to_array(), style.opacity),
-                    style.border_radius,
-                    with_opacity(border, style.opacity),
-                    style.border_thickness,
-                    clip,
-                );
-            }
-            let child_clip = make_child_clip(
-                style.x,
-                style.y,
-                *resolved_w,
-                *resolved_h,
-                style.overflow,
-                clip,
-            );
-            for child in children {
-                draw_clipped(
-                    child,
-                    sr,
-                    shadow,
-                    tr,
-                    fonts,
-                    mouse_x,
-                    mouse_y,
-                    left_just_pressed,
-                    child_clip,
-                    actions,
-                );
-            }
-        }
-
-        Element::Column {
-            style,
-            children,
-            resolved_w,
-            resolved_h,
-        } => {
-            draw_shadow(shadow, style.x, style.y, *resolved_w, *resolved_h, style);
-            if let Some(bg) = style.background {
-                let border = style.border_color.unwrap_or(Color::TRANSPARENT).to_array();
-                draw_shape(
-                    sr,
-                    style.x,
-                    style.y,
-                    *resolved_w,
-                    *resolved_h,
-                    with_opacity(bg.to_array(), style.opacity),
-                    style.border_radius,
-                    with_opacity(border, style.opacity),
-                    style.border_thickness,
-                    clip,
-                );
-            }
-            let child_clip = make_child_clip(
-                style.x,
-                style.y,
-                *resolved_w,
-                *resolved_h,
-                style.overflow,
-                clip,
-            );
-            for child in children {
-                draw_clipped(
-                    child,
-                    sr,
-                    shadow,
-                    tr,
-                    fonts,
-                    mouse_x,
-                    mouse_y,
-                    left_just_pressed,
-                    child_clip,
-                    actions,
-                );
-            }
-        }
+        Element::Rect(r) => r.draw(ctx),
+        Element::Text(t) => t.draw(ctx),
+        Element::Button(b) => b.draw(ctx),
+        Element::TextInput(t) => t.draw(ctx),
+        Element::TextEditor(t) => t.draw(ctx),
+        Element::Row(r) => r.draw(ctx),
+        Element::Column(c) => c.draw(ctx),
     }
 }
 
-fn draw_shape(
+// helpers shared across widgets
+
+pub fn is_outside(x: f32, y: f32, w: f32, h: f32, clip: Option<[f32; 4]>) -> bool {
+    let Some([cx, cy, cx2, cy2]) = clip else {
+        return false;
+    };
+    x + w < cx || y + h < cy || x > cx2 || y > cy2
+}
+
+pub fn make_child_clip(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    overflow: crate::Overflow,
+    parent_clip: Option<[f32; 4]>,
+) -> Option<[f32; 4]> {
+    if overflow == crate::Overflow::Hidden || overflow == crate::Overflow::Scroll {
+        let new_clip = [x, y, x + w, y + h];
+        if let Some([px, py, px2, py2]) = parent_clip {
+            Some([
+                new_clip[0].max(px),
+                new_clip[1].max(py),
+                new_clip[2].min(px2),
+                new_clip[3].min(py2),
+            ])
+        } else {
+            Some(new_clip)
+        }
+    } else {
+        parent_clip
+    }
+}
+
+pub fn with_opacity(mut color: [f32; 4], opacity: f32) -> [f32; 4] {
+    color[3] *= opacity;
+    color
+}
+
+pub fn draw_shape(
     sr: &mut ShapeRenderer,
     x: f32,
     y: f32,
@@ -338,7 +162,14 @@ fn draw_shape(
     }
 }
 
-fn draw_shadow(shadow: &mut ShadowRenderer, x: f32, y: f32, w: f32, h: f32, style: &crate::Style) {
+pub fn draw_shadow(
+    shadow: &mut ShadowRenderer,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    style: &crate::Style,
+) {
     if style.shadow_color.a > 0.0 && style.shadow_blur > 0.0 {
         shadow.draw_shadow(
             x,
@@ -354,39 +185,30 @@ fn draw_shadow(shadow: &mut ShadowRenderer, x: f32, y: f32, w: f32, h: f32, styl
     }
 }
 
-fn is_outside(x: f32, y: f32, w: f32, h: f32, clip: Option<[f32; 4]>) -> bool {
-    let Some([cx, cy, cx2, cy2]) = clip else {
-        return false;
-    };
-    x + w < cx || y + h < cy || x > cx2 || y > cy2
-}
-
-fn make_child_clip(
+pub fn check_interactions<M: Clone + 'static>(
+    interactions: &crate::Interactions<M>,
     x: f32,
     y: f32,
     w: f32,
     h: f32,
-    overflow: Overflow,
-    parent_clip: Option<[f32; 4]>,
-) -> Option<[f32; 4]> {
-    if overflow == Overflow::Hidden || overflow == Overflow::Scroll {
-        let new_clip = [x, y, x + w, y + h];
-        if let Some([px, py, px2, py2]) = parent_clip {
-            Some([
-                new_clip[0].max(px),
-                new_clip[1].max(py),
-                new_clip[2].min(px2),
-                new_clip[3].min(py2),
-            ])
-        } else {
-            Some(new_clip)
-        }
-    } else {
-        parent_clip
-    }
-}
+    ctx: &mut DrawCtx<M>,
+) {
+    let hovered =
+        ctx.mouse.x >= x && ctx.mouse.x <= x + w && ctx.mouse.y >= y && ctx.mouse.y <= y + h;
 
-fn with_opacity(mut color: [f32; 4], opacity: f32) -> [f32; 4] {
-    color[3] *= opacity;
-    color
+    if hovered {
+        if let Some(a) = &interactions.on_hover {
+            ctx.actions.push(a.clone());
+        }
+        if ctx.mouse.left_just_pressed {
+            if let Some(a) = &interactions.on_mouse_down {
+                ctx.actions.push(a.clone());
+            }
+        }
+        if ctx.mouse.left_just_released {
+            if let Some(a) = &interactions.on_click {
+                ctx.actions.push(a.clone());
+            }
+        }
+    }
 }

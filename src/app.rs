@@ -10,10 +10,13 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::draw::draw;
+use crate::draw::{Cursor, MouseState, draw};
 use crate::events::{Event, Key, MouseButton};
 use crate::layout::do_layout;
+use crate::state::StateStore;
 use crate::task::Task;
+use crate::widgets::text_editor as te;
+use crate::widgets::text_input as ti;
 use crate::{Color, Element, Fonts, GpuContext, ShadowRenderer, ShapeRenderer, TextRenderer};
 
 // settings
@@ -77,12 +80,10 @@ pub trait App: 'static + Sized {
     }
 }
 
-// user event to wake winit from background threads
 #[derive(Debug)]
 struct Wake;
 
 fn run<A: App>(settings: Settings) {
-    // start tokio runtime on a background thread
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
 
@@ -109,27 +110,21 @@ struct Runner<A: App> {
     shape_renderer: Option<ShapeRenderer>,
     shadow_renderer: Option<ShadowRenderer>,
     fonts: Option<Fonts>,
+    state: StateStore,
+    focused_input_id: Option<String>,
     clear_color: Color,
-    // task infrastructure
     proxy: EventLoopProxy<Wake>,
     tx: UnboundedSender<A::Action>,
     rx: UnboundedReceiver<A::Action>,
     rt: tokio::runtime::Runtime,
-    // internal mouse state for hit testing
-    mouse_x: f32,
-    mouse_y: f32,
-    mouse_left_pressed: bool,
-    mouse_left_just_pressed: bool,
-    mouse_right_pressed: bool,
-    mouse_right_just_pressed: bool,
-    mouse_middle_pressed: bool,
-    mouse_middle_just_pressed: bool,
-    // exclusive task tracking, keyed by call site hash, probabyl should change
+    mouse: MouseState,
     exclusive_tasks: HashMap<u64, tokio::task::AbortHandle>,
-    // modifier state baked into key events
+    current_cursor: Cursor,
     ctrl: bool,
     shift: bool,
     alt: bool,
+    start_time: std::time::Instant,
+    last_left_click_time: f64,
 }
 
 impl<A: App> Runner<A> {
@@ -153,23 +148,34 @@ impl<A: App> Runner<A> {
             shape_renderer: None,
             shadow_renderer: None,
             fonts: None,
+            state: StateStore::new(),
+            focused_input_id: None,
             clear_color: settings.clear_color,
             proxy,
             tx,
             rx,
             rt,
-            mouse_x: 0.0,
-            mouse_y: 0.0,
-            mouse_left_pressed: false,
-            mouse_left_just_pressed: false,
-            mouse_right_pressed: false,
-            mouse_right_just_pressed: false,
-            mouse_middle_pressed: false,
-            mouse_middle_just_pressed: false,
+            mouse: MouseState {
+                x: 0.0,
+                y: 0.0,
+                left_pressed: false,
+                left_just_pressed: false,
+                left_just_released: false,
+                right_pressed: false,
+                right_just_pressed: false,
+                middle_pressed: false,
+                middle_just_pressed: false,
+                left_click_count: 0,
+                left_click_x: 0.0,
+                left_click_y: 0.0,
+            },
             exclusive_tasks: HashMap::new(),
+            current_cursor: Cursor::Default,
             ctrl: false,
             shift: false,
             alt: false,
+            start_time: std::time::Instant::now(),
+            last_left_click_time: -1.0,
         }
     }
 
@@ -207,26 +213,20 @@ impl<A: App> Runner<A> {
         }
     }
 
-    // spawn a vec of tasks
-    // handles exclusive cancellation automatically
     fn spawn_tasks(&mut self, tasks: Vec<Task<A::Action>>) {
         for task in tasks {
             let exclusive_key = task.exclusive_key;
-
-            // if exclusive, cancel any previous task from the same call site
             if let Some(key) = exclusive_key {
                 if let Some(old_handle) = self.exclusive_tasks.remove(&key) {
                     old_handle.abort();
                 }
             }
-
             let tx = self.tx.clone();
             let proxy = self.proxy.clone();
             let send = Arc::new(move |action| {
                 let _ = tx.send(action);
                 let _ = proxy.send_event(Wake);
             });
-
             let exclusive_tasks = &mut self.exclusive_tasks;
             task.spawn(send, |handle| {
                 if let Some(key) = exclusive_key {
@@ -244,7 +244,6 @@ impl<A: App> Runner<A> {
         }
     }
 
-    // drain the action channel and call update for each pending action
     fn drain_channel(&mut self) {
         let mut any = false;
         while let Ok(action) = self.rx.try_recv() {
@@ -263,22 +262,41 @@ impl<A: App> Runner<A> {
             Err(_) => return,
         };
 
-        let (mut encoder, finisher, view, msaa_view) = frame.begin();
+        let (mut encoder, finisher, view) = frame.begin();
         let (width, height) = self.logical_size();
 
         let mut tree = self.app.view();
         do_layout(&mut tree, width, height, self.fonts.as_mut().unwrap());
 
-        let actions = draw(
+        let (actions, cursor) = draw(
             &mut tree,
             self.shape_renderer.as_mut().unwrap(),
             self.shadow_renderer.as_mut().unwrap(),
             self.text_renderer.as_mut().unwrap(),
             self.fonts.as_mut().unwrap(),
-            self.mouse_x,
-            self.mouse_y,
-            self.mouse_left_just_pressed,
+            &mut self.state,
+            &self.mouse,
+            self.scale_factor as f32,
         );
+
+        let resolved_cursor = cursor.unwrap_or(Cursor::Default);
+        if resolved_cursor != self.current_cursor {
+            self.current_cursor = resolved_cursor;
+            let winit_cursor = match resolved_cursor {
+                Cursor::Default => winit::window::CursorIcon::Default,
+                Cursor::Text => winit::window::CursorIcon::Text,
+                Cursor::Pointer => winit::window::CursorIcon::Pointer,
+                Cursor::Crosshair => winit::window::CursorIcon::Crosshair,
+                Cursor::Move => winit::window::CursorIcon::Move,
+                Cursor::ResizeNS => winit::window::CursorIcon::NsResize,
+                Cursor::ResizeEW => winit::window::CursorIcon::EwResize,
+                Cursor::NotAllowed => winit::window::CursorIcon::NotAllowed,
+                Cursor::Grab => winit::window::CursorIcon::Grab,
+                Cursor::Grabbing => winit::window::CursorIcon::Grabbing,
+                Cursor::Wait => winit::window::CursorIcon::Wait,
+            };
+            self.window().set_cursor(winit_cursor);
+        }
 
         {
             let gpu = self.gpu.as_ref().unwrap();
@@ -286,8 +304,8 @@ impl<A: App> Runner<A> {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &msaa_view,
-                    resolve_target: Some(&view),
+                    view: &view,
+                    resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
                             r: clear.r as f64,
@@ -328,19 +346,25 @@ impl<A: App> Runner<A> {
         self.text_renderer.as_mut().unwrap().trim_atlas();
         finisher.present(encoder, &self.gpu().queue);
 
-        // dispatch button/widget actions collected during draw
+        let had_actions = !actions.is_empty();
         for action in actions {
             let tasks = self.app.update(action);
             self.spawn_tasks(tasks);
         }
+        if had_actions {
+            self.window().request_redraw();
+        }
 
-        self.mouse_left_just_pressed = false;
-        self.mouse_right_just_pressed = false;
-        self.mouse_middle_just_pressed = false;
+        self.focused_input_id =
+            ti::find_focused(&self.state).or_else(|| te::find_focused(&self.state));
+
+        // reset one-frame flags
+        self.mouse.left_just_pressed = false;
+        self.mouse.left_just_released = false;
+        self.mouse.right_just_pressed = false;
+        self.mouse.middle_just_pressed = false;
     }
 }
-
-// winit ApplicationHandler
 
 impl<A: App> ApplicationHandler<Wake> for Runner<A> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -387,15 +411,12 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
         }
         self.fonts = Some(fonts);
 
-        // fire start() tasks
         let tasks = self.app.start();
         self.spawn_tasks(tasks);
-
         self.window().request_redraw();
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: Wake) {
-        // a background task finished and sent an action — drain the channel
         self.drain_channel();
     }
 
@@ -409,10 +430,10 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
             WindowEvent::CursorMoved { position, .. } => {
                 let x = (position.x / self.scale_factor) as f32;
                 let y = (position.y / self.scale_factor) as f32;
-                let dx = x - self.mouse_x;
-                let dy = y - self.mouse_y;
-                self.mouse_x = x;
-                self.mouse_y = y;
+                let dx = x - self.mouse.x;
+                let dy = y - self.mouse.y;
+                self.mouse.x = x;
+                self.mouse.y = y;
                 self.dispatch_event(Event::MouseMoved { x, y, dx, dy });
                 self.window().request_redraw();
             }
@@ -427,20 +448,38 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                 if let Some(btn) = btn {
                     match btn {
                         MouseButton::Left => {
-                            self.mouse_left_just_pressed = pressed && !self.mouse_left_pressed;
-                            self.mouse_left_pressed = pressed;
+                            self.mouse.left_just_pressed = pressed && !self.mouse.left_pressed;
+                            self.mouse.left_just_released = !pressed && self.mouse.left_pressed;
+                            self.mouse.left_pressed = pressed;
+                            if pressed {
+                                let now = self.start_time.elapsed().as_secs_f64();
+                                let dt = now - self.last_left_click_time;
+                                let dx = self.mouse.x - self.mouse.left_click_x;
+                                let dy = self.mouse.y - self.mouse.left_click_y;
+                                let dist = (dx * dx + dy * dy).sqrt();
+                                const DOUBLE_CLICK_TIME: f64 = 0.3;
+                                const DOUBLE_CLICK_DIST: f32 = 4.0;
+                                if dt < DOUBLE_CLICK_TIME && dist < DOUBLE_CLICK_DIST {
+                                    self.mouse.left_click_count += 1;
+                                } else {
+                                    self.mouse.left_click_count = 1;
+                                }
+                                self.mouse.left_click_x = self.mouse.x;
+                                self.mouse.left_click_y = self.mouse.y;
+                                self.last_left_click_time = now;
+                            }
                         }
                         MouseButton::Right => {
-                            self.mouse_right_just_pressed = pressed && !self.mouse_right_pressed;
-                            self.mouse_right_pressed = pressed;
+                            self.mouse.right_just_pressed = pressed && !self.mouse.right_pressed;
+                            self.mouse.right_pressed = pressed;
                         }
                         MouseButton::Middle => {
-                            self.mouse_middle_just_pressed = pressed && !self.mouse_middle_pressed;
-                            self.mouse_middle_pressed = pressed;
+                            self.mouse.middle_just_pressed = pressed && !self.mouse.middle_pressed;
+                            self.mouse.middle_pressed = pressed;
                         }
                     }
-                    let x = self.mouse_x;
-                    let y = self.mouse_y;
+                    let x = self.mouse.x;
+                    let y = self.mouse.y;
                     if pressed {
                         self.dispatch_event(Event::MousePressed { button: btn, x, y });
                     } else {
@@ -468,20 +507,111 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                         _ => {}
                     }
                     let (ctrl, shift, alt) = (self.ctrl, self.shift, self.alt);
-                    if pressed {
-                        self.dispatch_event(Event::KeyPressed {
+                    let bento_event = if pressed {
+                        Event::KeyPressed {
                             key,
                             ctrl,
                             shift,
                             alt,
-                        });
+                        }
                     } else {
-                        self.dispatch_event(Event::KeyReleased {
+                        Event::KeyReleased {
                             key,
                             ctrl,
                             shift,
                             alt,
-                        });
+                        }
+                    };
+
+                    let mut consumed = false;
+                    if let Some(id) = &self.focused_input_id.clone() {
+                        let text = if pressed && !ctrl {
+                            event.text.as_ref().map(|t| t.as_str()).unwrap_or("")
+                        } else {
+                            ""
+                        };
+
+                        // Determine which widget type is focused and route accordingly.
+                        // TextEditorState is stored under "te::<id>", so if that entry
+                        // is focused we're in a TextEditor; otherwise TextInput.
+                        let te_key = format!("te::{}", id);
+                        let is_text_editor = self
+                            .state
+                            .get_or_default::<crate::widgets::text_editor::TextEditorState>(&te_key)
+                            .focused;
+
+                        if !is_text_editor {
+                            let current_value = ti::get_cached_value(&self.state, id);
+                            if let Some(new_value) = ti::handle_key(
+                                &mut self.state,
+                                id,
+                                &current_value,
+                                &bento_event,
+                                text,
+                            ) {
+                                consumed = true;
+                                if let Some(action) =
+                                    ti::call_callback::<A::Action>(&self.state, id, new_value)
+                                {
+                                    let tasks = self.app.update(action);
+                                    self.spawn_tasks(tasks);
+                                }
+                                self.window().request_redraw();
+                            } else if matches!(
+                                bento_event,
+                                Event::KeyPressed {
+                                    key: Key::Left
+                                        | Key::Right
+                                        | Key::Home
+                                        | Key::End
+                                        | Key::Backspace
+                                        | Key::Delete,
+                                    ..
+                                }
+                            ) {
+                                consumed = true;
+                                self.window().request_redraw();
+                            }
+                        } else {
+                            // TextEditor
+                            let current_value = te::get_cached_value(&self.state, id);
+                            if let Some(new_value) = te::handle_key(
+                                &mut self.state,
+                                id,
+                                &current_value,
+                                &bento_event,
+                                text,
+                            ) {
+                                consumed = true;
+                                if let Some(action) =
+                                    te::call_callback::<A::Action>(&self.state, id, new_value)
+                                {
+                                    let tasks = self.app.update(action);
+                                    self.spawn_tasks(tasks);
+                                }
+                                self.window().request_redraw();
+                            } else if matches!(
+                                bento_event,
+                                Event::KeyPressed {
+                                    key: Key::Left
+                                        | Key::Right
+                                        | Key::Up
+                                        | Key::Down
+                                        | Key::Home
+                                        | Key::End
+                                        | Key::Backspace
+                                        | Key::Delete,
+                                    ..
+                                }
+                            ) {
+                                consumed = true;
+                                self.window().request_redraw();
+                            }
+                        }
+                    }
+
+                    if !consumed {
+                        self.dispatch_event(bento_event);
                     }
                 }
                 self.window().request_redraw();

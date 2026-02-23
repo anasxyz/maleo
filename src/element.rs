@@ -1,4 +1,8 @@
 use crate::Color;
+use crate::widgets::containers::{Column, Row};
+use crate::widgets::{
+    button::Button, rect::Rect, text::Text, text_editor::TextEditor, text_input::TextInput,
+};
 
 // alignment
 
@@ -31,7 +35,17 @@ pub enum Val {
     Percent(f32),
 }
 
-// edges, used for padding, margin, inset, etc
+pub fn px(v: f32) -> Val {
+    Val::Px(v)
+}
+pub fn percent(v: f32) -> Val {
+    Val::Percent(v)
+}
+pub fn auto() -> Val {
+    Val::Auto
+}
+
+// edges — used for padding, margin, inset, etc
 
 #[derive(Clone, Copy, Default)]
 pub struct Edges {
@@ -100,16 +114,27 @@ impl Edges {
     }
 }
 
-// keep padding as an alias for backwards compat and ergonomics
 pub type Padding = Edges;
 
-// margin — each side can be a value or auto
-#[derive(Clone, Copy, Default)]
+// margin — None on a side means auto (absorbs remaining space, used for centering)
+
+#[derive(Clone, Copy)]
 pub struct Margin {
     pub top: Option<f32>,
     pub right: Option<f32>,
     pub bottom: Option<f32>,
     pub left: Option<f32>,
+}
+
+impl Default for Margin {
+    fn default() -> Self {
+        Self {
+            top: Some(0.0),
+            right: Some(0.0),
+            bottom: Some(0.0),
+            left: Some(0.0),
+        }
+    }
 }
 
 impl Margin {
@@ -214,12 +239,30 @@ pub enum Overflow {
     Scroll,
 }
 
-// style
+// interactions — attached to any element
+
+pub struct Interactions<M> {
+    pub on_click: Option<M>,
+    pub on_hover: Option<M>, // fires every frame while hovered
+    pub on_mouse_down: Option<M>,
+}
+
+impl<M> Default for Interactions<M> {
+    fn default() -> Self {
+        Self {
+            on_click: None,
+            on_hover: None,
+            on_mouse_down: None,
+        }
+    }
+}
+
+// layout — sizing, flex, alignment, spacing, position
+// consumed by the layout pass (taffy), not used for rendering
 
 #[derive(Clone)]
-pub struct Style {
-    // resolved position
-    // this is set by layout, not by user
+pub struct Layout {
+    // resolved position — written by layout pass, not set by user
     pub x: f32,
     pub y: f32,
 
@@ -242,8 +285,7 @@ pub struct Style {
     pub align_x: Align,
     pub align_y: Align,
 
-    // alignment (
-    // this is on self, overrides parentss align_items
+    // alignment (on self, overrides parent align_items)
     pub align_self: Option<Align>,
 
     // spacing
@@ -255,20 +297,11 @@ pub struct Style {
     pub position: Position,
     pub inset: Edges,
 
-    // visuals
-    pub background: Option<Color>,
-    pub border_radius: f32,
-    pub border_color: Option<Color>,
-    pub border_thickness: f32,
-    pub opacity: f32,
+    // overflow
     pub overflow: Overflow,
-    pub shadow_color: Color,
-    pub shadow_offset_x: f32,
-    pub shadow_offset_y: f32,
-    pub shadow_blur: f32,
 }
 
-impl Default for Style {
+impl Default for Layout {
     fn default() -> Self {
         Self {
             x: 0.0,
@@ -287,362 +320,434 @@ impl Default for Style {
             align_x: Align::Start,
             align_y: Align::Start,
             align_self: None,
-            padding: Edges::default(),
+            padding: Padding::default(),
             margin: Margin::default(),
             gap: 0.0,
             position: Position::Relative,
             inset: Edges::default(),
+            overflow: Overflow::Visible,
+        }
+    }
+}
+
+// style — purely visual properties used during rendering
+
+#[derive(Clone)]
+pub struct Style {
+    pub background: Option<Color>,
+    pub border_radius: f32,
+    pub border_color: Option<Color>,
+    pub border_thickness: f32,
+    pub opacity: f32,
+    pub shadow_color: Color,
+    pub shadow_offset_x: f32,
+    pub shadow_offset_y: f32,
+    pub shadow_blur: f32,
+    pub text_color: Option<Color>,
+}
+
+impl Default for Style {
+    fn default() -> Self {
+        Self {
             background: None,
             border_radius: 0.0,
             border_color: None,
             border_thickness: 0.0,
             opacity: 1.0,
-            overflow: Overflow::Visible,
             shadow_color: Color::TRANSPARENT,
             shadow_offset_x: 0.0,
             shadow_offset_y: 0.0,
             shadow_blur: 0.0,
+            text_color: None,
         }
     }
 }
 
-// element
+// element — thin enum, each variant wraps a widget struct
 
 pub enum Element<M: Clone + 'static = ()> {
     Empty,
-    Rect {
-        color: Color,
-        style: Style,
-        resolved_w: f32,
-        resolved_h: f32,
-    },
-    Text {
-        content: String,
-        color: Color,
-        font: Option<String>,
-        font_size: Option<f32>,
-        font_weight: u16,
-        italic: bool,
-        text_align: TextAlign,
-        style: Style,
-    },
-    Button {
-        label: String,
-        style: Style,
-        on_click: Option<M>,
-        resolved_x: f32,
-        resolved_y: f32,
-        resolved_w: f32,
-        resolved_h: f32,
-    },
-    Row {
-        style: Style,
-        children: Vec<Element<M>>,
-        resolved_w: f32,
-        resolved_h: f32,
-    },
-    Column {
-        style: Style,
-        children: Vec<Element<M>>,
-        resolved_w: f32,
-        resolved_h: f32,
-    },
+    Rect(Rect<M>),
+    Text(Text<M>),
+    Button(Button<M>),
+    TextInput(TextInput<M>),
+    TextEditor(TextEditor<M>),
+    Row(Row<M>),
+    Column(Column<M>),
 }
 
-// builder impl
+// forwarding methods on Element so button("label").on_click(...) etc. keep working
 
 impl<M: Clone + 'static> Element<M> {
-    fn style_mut(&mut self) -> Option<&mut Style> {
+    // interactions
+    pub fn on_click(self, msg: M) -> Self {
         match self {
-            Element::Rect { style, .. } => Some(style),
-            Element::Text { style, .. } => Some(style),
-            Element::Row { style, .. } => Some(style),
-            Element::Column { style, .. } => Some(style),
-            Element::Button { style, .. } => Some(style),
-            Element::Empty => None,
+            Element::Rect(w) => Element::Rect(w.on_click(msg)),
+            Element::Button(w) => Element::Button(w.on_click(msg)),
+            Element::TextInput(w) => Element::TextInput(w.on_click(msg)),
+            Element::TextEditor(w) => Element::TextEditor(w.on_click(msg)),
+            Element::Row(w) => Element::Row(w.on_click(msg)),
+            Element::Column(w) => Element::Column(w.on_click(msg)),
+            other => other,
+        }
+    }
+    pub fn on_hover(self, msg: M) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.on_hover(msg)),
+            Element::Button(w) => Element::Button(w.on_hover(msg)),
+            Element::TextInput(w) => Element::TextInput(w.on_hover(msg)),
+            Element::TextEditor(w) => Element::TextEditor(w.on_hover(msg)),
+            Element::Row(w) => Element::Row(w.on_hover(msg)),
+            Element::Column(w) => Element::Column(w.on_hover(msg)),
+            other => other,
+        }
+    }
+    pub fn on_mouse_down(self, msg: M) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.on_mouse_down(msg)),
+            Element::Button(w) => Element::Button(w.on_mouse_down(msg)),
+            Element::Row(w) => Element::Row(w.on_mouse_down(msg)),
+            Element::Column(w) => Element::Column(w.on_mouse_down(msg)),
+            other => other,
         }
     }
 
-    // on_click — takes an action value, not a closure
-    pub fn on_click(mut self, msg: M) -> Self {
-        if let Element::Button {
-            ref mut on_click, ..
-        } = self
-        {
-            *on_click = Some(msg);
+    // layout
+    pub fn width(self, v: Val) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.width(v)),
+            Element::Text(w) => Element::Text(w.width(v)),
+            Element::Button(w) => Element::Button(w.width(v)),
+            Element::TextInput(w) => Element::TextInput(w.width(v)),
+            Element::TextEditor(w) => Element::TextEditor(w.width(v)),
+            Element::Row(w) => Element::Row(w.width(v)),
+            Element::Column(w) => Element::Column(w.width(v)),
+            other => other,
         }
-        self
+    }
+    pub fn height(self, v: Val) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.height(v)),
+            Element::Button(w) => Element::Button(w.height(v)),
+            Element::TextInput(w) => Element::TextInput(w.height(v)),
+            Element::TextEditor(w) => Element::TextEditor(w.height(v)),
+            Element::Row(w) => Element::Row(w.height(v)),
+            Element::Column(w) => Element::Column(w.height(v)),
+            other => other,
+        }
+    }
+    pub fn min_width(self, v: Val) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.min_width(v)),
+            Element::Row(w) => Element::Row(w.min_width(v)),
+            Element::Column(w) => Element::Column(w.min_width(v)),
+            other => other,
+        }
+    }
+    pub fn max_width(self, v: Val) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.max_width(v)),
+            Element::Row(w) => Element::Row(w.max_width(v)),
+            Element::Column(w) => Element::Column(w.max_width(v)),
+            other => other,
+        }
+    }
+    pub fn min_height(self, v: Val) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.min_height(v)),
+            Element::Row(w) => Element::Row(w.min_height(v)),
+            Element::Column(w) => Element::Column(w.min_height(v)),
+            other => other,
+        }
+    }
+    pub fn max_height(self, v: Val) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.max_height(v)),
+            Element::Row(w) => Element::Row(w.max_height(v)),
+            Element::Column(w) => Element::Column(w.max_height(v)),
+            other => other,
+        }
+    }
+    pub fn grow(self, v: f32) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.grow(v)),
+            Element::Text(w) => Element::Text(w.grow(v)),
+            Element::Button(w) => Element::Button(w.grow(v)),
+            Element::TextInput(w) => Element::TextInput(w.grow(v)),
+            Element::TextEditor(w) => Element::TextEditor(w.grow(v)),
+            Element::Row(w) => Element::Row(w.grow(v)),
+            Element::Column(w) => Element::Column(w.grow(v)),
+            other => other,
+        }
+    }
+    pub fn shrink(self, v: f32) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.shrink(v)),
+            Element::Row(w) => Element::Row(w.shrink(v)),
+            Element::Column(w) => Element::Column(w.shrink(v)),
+            other => other,
+        }
+    }
+    pub fn gap(self, v: f32) -> Self {
+        match self {
+            Element::Row(w) => Element::Row(w.gap(v)),
+            Element::Column(w) => Element::Column(w.gap(v)),
+            other => other,
+        }
+    }
+    pub fn padding(self, e: Edges) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.padding(e)),
+            Element::TextInput(w) => Element::TextInput(w.padding(e)),
+            Element::TextEditor(w) => Element::TextEditor(w.padding(e)),
+            Element::Row(w) => Element::Row(w.padding(e)),
+            Element::Column(w) => Element::Column(w.padding(e)),
+            other => other,
+        }
+    }
+    pub fn margin(self, e: Margin) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.margin(e)),
+            Element::Text(w) => Element::Text(w.margin(e)),
+            Element::Button(w) => Element::Button(w.margin(e)),
+            Element::TextInput(w) => Element::TextInput(w.margin(e)),
+            Element::TextEditor(w) => Element::TextEditor(w.margin(e)),
+            Element::Row(w) => Element::Row(w.margin(e)),
+            Element::Column(w) => Element::Column(w.margin(e)),
+            other => other,
+        }
+    }
+    pub fn align_x(self, a: Align) -> Self {
+        match self {
+            Element::Row(w) => Element::Row(w.align_x(a)),
+            Element::Column(w) => Element::Column(w.align_x(a)),
+            other => other,
+        }
+    }
+    pub fn align_y(self, a: Align) -> Self {
+        match self {
+            Element::Row(w) => Element::Row(w.align_y(a)),
+            Element::Column(w) => Element::Column(w.align_y(a)),
+            other => other,
+        }
+    }
+    pub fn align_self(self, a: Align) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.align_self(a)),
+            Element::Text(w) => Element::Text(w.align_self(a)),
+            Element::Button(w) => Element::Button(w.align_self(a)),
+            Element::TextInput(w) => Element::TextInput(w.align_self(a)),
+            Element::TextEditor(w) => Element::TextEditor(w.align_self(a)),
+            Element::Row(w) => Element::Row(w.align_self(a)),
+            Element::Column(w) => Element::Column(w.align_self(a)),
+            other => other,
+        }
+    }
+    pub fn absolute(self) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.absolute()),
+            Element::Row(w) => Element::Row(w.absolute()),
+            Element::Column(w) => Element::Column(w.absolute()),
+            other => other,
+        }
+    }
+    pub fn inset(self, e: Edges) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.inset(e)),
+            Element::Row(w) => Element::Row(w.inset(e)),
+            Element::Column(w) => Element::Column(w.inset(e)),
+            other => other,
+        }
+    }
+    pub fn overflow_hidden(self) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.overflow_hidden()),
+            Element::Row(w) => Element::Row(w.overflow_hidden()),
+            Element::Column(w) => Element::Column(w.overflow_hidden()),
+            other => other,
+        }
+    }
+    pub fn overflow_scroll(self) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.overflow_scroll()),
+            Element::Row(w) => Element::Row(w.overflow_scroll()),
+            Element::Column(w) => Element::Column(w.overflow_scroll()),
+            other => other,
+        }
+    }
+    pub fn wrap(self) -> Self {
+        match self {
+            Element::Row(w) => Element::Row(w.wrap()),
+            Element::Column(w) => Element::Column(w.wrap()),
+            other => other,
+        }
     }
 
-    // sizing
-    pub fn width(mut self, v: Val) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.width = v;
+    // style
+    pub fn background(self, color: Color) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.background(color)),
+            Element::Button(w) => Element::Button(w.background(color)),
+            Element::TextInput(w) => Element::TextInput(w.background(color)),
+            Element::TextEditor(w) => Element::TextEditor(w.background(color)),
+            Element::Row(w) => Element::Row(w.background(color)),
+            Element::Column(w) => Element::Column(w.background(color)),
+            other => other,
         }
-        self
     }
-    pub fn height(mut self, v: Val) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.height = v;
+    pub fn border_radius(self, v: f32) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.border_radius(v)),
+            Element::Button(w) => Element::Button(w.border_radius(v)),
+            Element::TextInput(w) => Element::TextInput(w.border_radius(v)),
+            Element::TextEditor(w) => Element::TextEditor(w.border_radius(v)),
+            Element::Row(w) => Element::Row(w.border_radius(v)),
+            Element::Column(w) => Element::Column(w.border_radius(v)),
+            other => other,
         }
-        self
     }
-    pub fn min_width(mut self, v: Val) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.min_width = v;
+    pub fn border(self, color: Color, thickness: f32) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.border(color, thickness)),
+            Element::Button(w) => Element::Button(w.border(color, thickness)),
+            Element::TextInput(w) => Element::TextInput(w.border(color, thickness)),
+            Element::TextEditor(w) => Element::TextEditor(w.border(color, thickness)),
+            Element::Row(w) => Element::Row(w.border(color, thickness)),
+            Element::Column(w) => Element::Column(w.border(color, thickness)),
+            other => other,
         }
-        self
     }
-    pub fn max_width(mut self, v: Val) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.max_width = v;
+    pub fn opacity(self, v: f32) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.opacity(v)),
+            Element::Text(w) => Element::Text(w.opacity(v)),
+            Element::Button(w) => Element::Button(w.opacity(v)),
+            Element::TextInput(w) => Element::TextInput(w.opacity(v)),
+            Element::TextEditor(w) => Element::TextEditor(w.opacity(v)),
+            Element::Row(w) => Element::Row(w.opacity(v)),
+            Element::Column(w) => Element::Column(w.opacity(v)),
+            other => other,
         }
-        self
     }
-    pub fn min_height(mut self, v: Val) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.min_height = v;
+    pub fn shadow(self, color: Color, offset_x: f32, offset_y: f32, blur: f32) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.shadow(color, offset_x, offset_y, blur)),
+            Element::Button(w) => Element::Button(w.shadow(color, offset_x, offset_y, blur)),
+            Element::Row(w) => Element::Row(w.shadow(color, offset_x, offset_y, blur)),
+            Element::Column(w) => Element::Column(w.shadow(color, offset_x, offset_y, blur)),
+            other => other,
         }
-        self
     }
-    pub fn max_height(mut self, v: Val) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.max_height = v;
+    pub fn text_color(self, color: Color) -> Self {
+        match self {
+            Element::Button(w) => Element::Button(w.text_color(color)),
+            Element::TextInput(w) => Element::TextInput(w.text_color(color)),
+            Element::TextEditor(w) => Element::TextEditor(w.text_color(color)),
+            other => other,
         }
-        self
-    }
-    pub fn aspect_ratio(mut self, ratio: f32) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.aspect_ratio = Some(ratio);
-        }
-        self
-    }
-
-    // flex
-    pub fn grow(mut self, v: f32) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.grow = v;
-        }
-        self
-    }
-    pub fn shrink(mut self, v: f32) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.shrink = Some(v);
-        }
-        self
-    }
-    pub fn basis(mut self, v: Val) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.basis = v;
-        }
-        self
-    }
-    pub fn wrap(mut self) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.wrap = true;
-        }
-        self
     }
 
-    // alignment
-    pub fn align_x(mut self, a: Align) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.align_x = a;
+    // text / font
+    pub fn font_size(self, size: f32) -> Self {
+        match self {
+            Element::Text(w) => Element::Text(w.font_size(size)),
+            Element::TextInput(w) => Element::TextInput(w.font_size(size)),
+            Element::TextEditor(w) => Element::TextEditor(w.font_size(size)),
+            other => other,
         }
-        self
     }
-    pub fn align_y(mut self, a: Align) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.align_y = a;
+    pub fn font_weight(self, weight: u16) -> Self {
+        match self {
+            Element::Text(w) => Element::Text(w.font_weight(weight)),
+            Element::TextInput(w) => Element::TextInput(w.font_weight(weight)),
+            Element::TextEditor(w) => Element::TextEditor(w.font_weight(weight)),
+            other => other,
         }
-        self
     }
-    pub fn align_self(mut self, a: Align) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.align_self = Some(a);
+    pub fn font(self, name: &str) -> Self {
+        match self {
+            Element::Text(w) => Element::Text(w.font(name)),
+            Element::TextInput(w) => Element::TextInput(w.font(name)),
+            Element::TextEditor(w) => Element::TextEditor(w.font(name)),
+            other => other,
         }
-        self
     }
-
-    // spacing
-    pub fn padding(mut self, e: Edges) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.padding = e;
+    pub fn italic(self) -> Self {
+        match self {
+            Element::Text(w) => Element::Text(w.italic()),
+            other => other,
         }
-        self
     }
-    pub fn margin(mut self, e: Margin) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.margin = e;
+    pub fn text_align(self, align: TextAlign) -> Self {
+        match self {
+            Element::Text(w) => Element::Text(w.text_align(align)),
+            other => other,
         }
-        self
-    }
-    pub fn gap(mut self, v: f32) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.gap = v;
-        }
-        self
     }
 
-    // position
-    pub fn absolute(mut self) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.position = Position::Absolute;
+    // text input specific
+    pub fn value(self, v: &str) -> Self {
+        match self {
+            Element::TextInput(w) => Element::TextInput(w.value(v)),
+            Element::TextEditor(w) => Element::TextEditor(w.value(v)),
+            other => other,
         }
-        self
     }
-    pub fn inset(mut self, e: Edges) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.inset = e;
+    pub fn placeholder(self, text: &str) -> Self {
+        match self {
+            Element::TextInput(w) => Element::TextInput(w.placeholder(text)),
+            Element::TextEditor(w) => Element::TextEditor(w.placeholder(text)),
+            other => other,
         }
-        self
     }
-
-    // visuals
-    pub fn background(mut self, color: Color) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.background = Some(color);
+    pub fn placeholder_color(self, color: Color) -> Self {
+        match self {
+            Element::TextInput(w) => Element::TextInput(w.placeholder_color(color)),
+            Element::TextEditor(w) => Element::TextEditor(w.placeholder_color(color)),
+            other => other,
         }
-        self
     }
-    pub fn border_radius(mut self, v: f32) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.border_radius = v;
+    pub fn on_change(self, f: impl Fn(String) -> M + 'static) -> Self {
+        match self {
+            Element::TextInput(w) => Element::TextInput(w.on_change(f)),
+            Element::TextEditor(w) => Element::TextEditor(w.on_change(f)),
+            other => other,
         }
-        self
-    }
-    pub fn border(mut self, color: Color, thickness: f32) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.border_color = Some(color);
-            s.border_thickness = thickness;
-        }
-        self
-    }
-    pub fn opacity(mut self, v: f32) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.opacity = v;
-        }
-        self
-    }
-    pub fn shadow(mut self, color: Color, offset_x: f32, offset_y: f32, blur: f32) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.shadow_color = color;
-            s.shadow_offset_x = offset_x;
-            s.shadow_offset_y = offset_y;
-            s.shadow_blur = blur;
-        }
-        self
-    }
-    pub fn overflow_hidden(mut self) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.overflow = Overflow::Hidden;
-        }
-        self
-    }
-    pub fn overflow_scroll(mut self) -> Self {
-        if let Some(s) = self.style_mut() {
-            s.overflow = Overflow::Scroll;
-        }
-        self
-    }
-
-    // font (text only)
-    pub fn font(mut self, name: &str) -> Self {
-        if let Element::Text { ref mut font, .. } = self {
-            *font = Some(name.to_string());
-        }
-        self
-    }
-    pub fn font_size(mut self, size: f32) -> Self {
-        if let Element::Text {
-            ref mut font_size, ..
-        } = self
-        {
-            *font_size = Some(size);
-        }
-        self
-    }
-    pub fn font_weight(mut self, weight: u16) -> Self {
-        if let Element::Text {
-            ref mut font_weight,
-            ..
-        } = self
-        {
-            *font_weight = weight;
-        }
-        self
-    }
-    pub fn italic(mut self) -> Self {
-        if let Element::Text { ref mut italic, .. } = self {
-            *italic = true;
-        }
-        self
-    }
-    pub fn text_align(mut self, align: TextAlign) -> Self {
-        if let Element::Text {
-            ref mut text_align, ..
-        } = self
-        {
-            *text_align = align;
-        }
-        self
     }
 }
+
+// constructor functions — public API, identical to before from user's perspective
 
 pub fn empty<M: Clone + 'static>() -> Element<M> {
     Element::Empty
 }
 
 pub fn rect<M: Clone + 'static>(color: Color) -> Element<M> {
-    Element::Rect {
-        color,
-        style: Style::default(),
-        resolved_w: 0.0,
-        resolved_h: 0.0,
-    }
+    Element::Rect(Rect::new(color))
 }
 
 pub fn text<M: Clone + 'static>(content: &str, color: Color) -> Element<M> {
-    Element::Text {
-        content: content.to_string(),
-        color,
-        font: None,
-        font_size: None,
-        font_weight: 400,
-        italic: false,
-        text_align: TextAlign::Left,
-        style: Style::default(),
-    }
+    Element::Text(Text::new(content, color))
 }
 
 pub fn button<M: Clone + 'static>(label: &str) -> Element<M> {
-    Element::Button {
-        label: label.to_string(),
-        style: Style::default(),
-        on_click: None,
-        resolved_x: 0.0,
-        resolved_y: 0.0,
-        resolved_w: 0.0,
-        resolved_h: 0.0,
-    }
+    Element::Button(Button::new(label))
+}
+
+pub fn text_input<M: Clone + 'static>(id: &str) -> Element<M> {
+    Element::TextInput(TextInput::new(id))
+}
+
+pub fn text_editor<M: Clone + 'static>(id: &str) -> Element<M> {
+    Element::TextEditor(TextEditor::new(id))
 }
 
 pub fn row<M: Clone + 'static>(children: Vec<Element<M>>) -> Element<M> {
-    Element::Row {
-        style: Style::default(),
-        children,
-        resolved_w: 0.0,
-        resolved_h: 0.0,
-    }
+    Element::Row(Row::new(children))
 }
 
 pub fn column<M: Clone + 'static>(children: Vec<Element<M>>) -> Element<M> {
-    Element::Column {
-        style: Style::default(),
-        children,
-        resolved_w: 0.0,
-        resolved_h: 0.0,
-    }
+    Element::Column(Column::new(children))
 }
 
 pub fn exit() {
