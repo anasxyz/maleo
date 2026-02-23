@@ -73,7 +73,7 @@ impl<M: Clone + 'static> Text<M> {
     pub fn layout_node(&self, taffy: &mut TaffyTree<()>, fonts: &mut Fonts) -> NodeId {
         let font_id = fonts.resolve(self.font.as_deref()).unwrap();
         let (w, h) = match self.font_size {
-            Some(size) => fonts.measure_sized(&self.content, font_id, size),
+            Some(size) => fonts.measure_sized(&self.content, font_id, size, self.font_weight),
             None => fonts.measure(&self.content, font_id),
         };
         taffy

@@ -133,7 +133,9 @@ impl<M: Clone + 'static> TextInput<M> {
         } else {
             8.0
         };
-        let (_, th) = ctx.fonts.measure_sized("M", font_id, size);
+        let (_, th) = ctx
+            .fonts
+            .measure_sized("M", font_id, size, self.font_weight);
         let ty = if self.layout.padding.top > 0.0 {
             y + self.layout.padding.top
         } else {
@@ -144,9 +146,9 @@ impl<M: Clone + 'static> TextInput<M> {
         let text_clip = Some([x + pad_l, y, x + w - pad_r, y + h]);
 
         let cursor_pos = ctx.state.get_or_default::<TextInputState>(&self.id).cursor;
-        let (cursor_x_abs, _) = ctx
-            .fonts
-            .measure_sized(&value_str[..cursor_pos], font_id, size);
+        let (cursor_x_abs, _) =
+            ctx.fonts
+                .measure_sized(&value_str[..cursor_pos], font_id, size, self.font_weight);
         {
             let s = ctx.state.get_or_default_mut::<TextInputState>(&self.id);
             if cursor_x_abs - s.scroll_offset > text_area_w - 2.0 {
@@ -208,9 +210,9 @@ impl<M: Clone + 'static> TextInput<M> {
                 .style
                 .text_color
                 .unwrap_or(Color::new(0.7, 0.75, 1.0, 1.0));
-            // Snap to nearest whole pixel so the cursor is always crisp.
+            // snap to nearest whole pixel so the cursor is always crisp.
             // floor() rather than round() keeps the cursor just after the
-            // character it follows, which matches native text field behaviour.
+            // character it follows, which matches native text field behaviour
             let cursor_draw_x = (x + pad_l + cursor_x_abs - scroll).floor();
             let cursor_draw_y = ty.floor();
             let cursor_h = th.ceil();
@@ -218,7 +220,7 @@ impl<M: Clone + 'static> TextInput<M> {
                 ctx.sr.draw_rect(
                     cursor_draw_x,
                     cursor_draw_y,
-                    1.0,
+                    2.0,
                     cursor_h,
                     with_opacity(cursor_col.to_array(), self.style.opacity),
                     [0.0; 4],
@@ -237,7 +239,7 @@ impl<M: Clone + 'static> TextInput<M> {
             .and_then(|name| fonts.resolve(Some(name)))
             .unwrap_or_else(|| fonts.default_id().unwrap());
         let size = self.font_size.unwrap_or(fonts.get(font_id).size);
-        let (_, th) = fonts.measure_sized("M", font_id, size);
+        let (_, th) = fonts.measure_sized("M", font_id, size, 400);
         let pad_v = if self.layout.padding.top > 0.0 {
             self.layout.padding.top + self.layout.padding.bottom
         } else {
