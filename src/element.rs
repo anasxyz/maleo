@@ -642,6 +642,7 @@ impl<M: Clone + 'static> Element<M> {
     pub fn font_weight(self, weight: u16) -> Self {
         match self {
             Element::Text(w) => Element::Text(w.font_weight(weight)),
+            Element::TextInput(w) => Element::TextInput(w.font_weight(weight)),
             other => other,
         }
     }

@@ -22,6 +22,7 @@ pub struct TextInput<M: Clone + 'static> {
     pub placeholder_color: Option<Color>,
     pub font: Option<String>,
     pub font_size: Option<f32>,
+    pub font_weight: u16,
     pub value: Option<String>,
     pub layout: Layout,
     pub style: Style,
@@ -41,6 +42,7 @@ impl<M: Clone + 'static> TextInput<M> {
             placeholder_color: None,
             font: None,
             font_size: None,
+            font_weight: 400,
             value: None,
             layout: Layout::default(),
             style: Style::default(),
@@ -170,7 +172,7 @@ impl<M: Clone + 'static> TextInput<M> {
                 &mut ctx.fonts.font_system,
                 family,
                 size,
-                400,
+                self.font_weight,
                 false,
                 TextAlign::Left,
                 &self.placeholder,
@@ -189,7 +191,7 @@ impl<M: Clone + 'static> TextInput<M> {
                 &mut ctx.fonts.font_system,
                 family,
                 size,
-                400,
+                self.font_weight,
                 false,
                 TextAlign::Left,
                 value_str,
@@ -206,13 +208,18 @@ impl<M: Clone + 'static> TextInput<M> {
                 .style
                 .text_color
                 .unwrap_or(Color::new(0.7, 0.75, 1.0, 1.0));
-            let cursor_draw_x = x + pad_l + cursor_x_abs - scroll;
+            // Snap to nearest whole pixel so the cursor is always crisp.
+            // floor() rather than round() keeps the cursor just after the
+            // character it follows, which matches native text field behaviour.
+            let cursor_draw_x = (x + pad_l + cursor_x_abs - scroll).floor();
+            let cursor_draw_y = ty.floor();
+            let cursor_h = th.ceil();
             if cursor_draw_x >= x + pad_l && cursor_draw_x <= x + w - pad_r {
                 ctx.sr.draw_rect(
                     cursor_draw_x,
-                    ty,
-                    1.5,
-                    th,
+                    cursor_draw_y,
+                    1.0,
+                    cursor_h,
                     with_opacity(cursor_col.to_array(), self.style.opacity),
                     [0.0; 4],
                     0.0,
@@ -333,6 +340,10 @@ impl<M: Clone + 'static> TextInput<M> {
     }
     pub fn font_size(mut self, size: f32) -> Self {
         self.font_size = Some(size);
+        self
+    }
+    pub fn font_weight(mut self, weight: u16) -> Self {
+        self.font_weight = weight;
         self
     }
     pub fn on_change(mut self, f: impl Fn(String) -> M + 'static) -> Self {
