@@ -10,7 +10,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::draw::draw;
+use crate::draw::{MouseState, draw};
 use crate::events::{Event, Key, MouseButton};
 use crate::layout::do_layout;
 use crate::state::StateStore;
@@ -79,12 +79,10 @@ pub trait App: 'static + Sized {
     }
 }
 
-// user event to wake winit from background threads
 #[derive(Debug)]
 struct Wake;
 
 fn run<A: App>(settings: Settings) {
-    // start tokio runtime on a background thread
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
 
@@ -114,24 +112,12 @@ struct Runner<A: App> {
     state: StateStore,
     focused_input_id: Option<String>,
     clear_color: Color,
-    // task infrastructure
     proxy: EventLoopProxy<Wake>,
     tx: UnboundedSender<A::Action>,
     rx: UnboundedReceiver<A::Action>,
     rt: tokio::runtime::Runtime,
-    // internal mouse state for hit testing
-    mouse_x: f32,
-    mouse_y: f32,
-    mouse_left_pressed: bool,
-    mouse_left_just_pressed: bool,
-    mouse_left_just_released: bool,
-    mouse_right_pressed: bool,
-    mouse_right_just_pressed: bool,
-    mouse_middle_pressed: bool,
-    mouse_middle_just_pressed: bool,
-    // exclusive task tracking — keyed by call site hash
+    mouse: MouseState,
     exclusive_tasks: HashMap<u64, tokio::task::AbortHandle>,
-    // modifier state baked into key events
     ctrl: bool,
     shift: bool,
     alt: bool,
@@ -165,15 +151,17 @@ impl<A: App> Runner<A> {
             tx,
             rx,
             rt,
-            mouse_x: 0.0,
-            mouse_y: 0.0,
-            mouse_left_pressed: false,
-            mouse_left_just_pressed: false,
-            mouse_left_just_released: false,
-            mouse_right_pressed: false,
-            mouse_right_just_pressed: false,
-            mouse_middle_pressed: false,
-            mouse_middle_just_pressed: false,
+            mouse: MouseState {
+                x: 0.0,
+                y: 0.0,
+                left_pressed: false,
+                left_just_pressed: false,
+                left_just_released: false,
+                right_pressed: false,
+                right_just_pressed: false,
+                middle_pressed: false,
+                middle_just_pressed: false,
+            },
             exclusive_tasks: HashMap::new(),
             ctrl: false,
             shift: false,
@@ -215,25 +203,20 @@ impl<A: App> Runner<A> {
         }
     }
 
-    // spawn a vec of tasks — handles exclusive cancellation automatically
     fn spawn_tasks(&mut self, tasks: Vec<Task<A::Action>>) {
         for task in tasks {
             let exclusive_key = task.exclusive_key;
-
-            // if exclusive, cancel any previous task from the same call site
             if let Some(key) = exclusive_key {
                 if let Some(old_handle) = self.exclusive_tasks.remove(&key) {
                     old_handle.abort();
                 }
             }
-
             let tx = self.tx.clone();
             let proxy = self.proxy.clone();
             let send = Arc::new(move |action| {
                 let _ = tx.send(action);
                 let _ = proxy.send_event(Wake);
             });
-
             let exclusive_tasks = &mut self.exclusive_tasks;
             task.spawn(send, |handle| {
                 if let Some(key) = exclusive_key {
@@ -251,7 +234,6 @@ impl<A: App> Runner<A> {
         }
     }
 
-    // drain the action channel and call update for each pending action
     fn drain_channel(&mut self) {
         let mut any = false;
         while let Ok(action) = self.rx.try_recv() {
@@ -283,10 +265,7 @@ impl<A: App> Runner<A> {
             self.text_renderer.as_mut().unwrap(),
             self.fonts.as_mut().unwrap(),
             &mut self.state,
-            self.mouse_x,
-            self.mouse_y,
-            self.mouse_left_just_pressed,
-            self.mouse_left_just_released,
+            &self.mouse,
         );
 
         {
@@ -337,28 +316,24 @@ impl<A: App> Runner<A> {
         self.text_renderer.as_mut().unwrap().trim_atlas();
         finisher.present(encoder, &self.gpu().queue);
 
-        // dispatch button/widget actions collected during draw
         let had_actions = !actions.is_empty();
         for action in actions {
             let tasks = self.app.update(action);
             self.spawn_tasks(tasks);
         }
-        // if anything changed, render the new state immediately
         if had_actions {
             self.window().request_redraw();
         }
 
-        // update focused input id by scanning state
         self.focused_input_id = ti::find_focused(&self.state);
 
-        self.mouse_left_just_pressed = false;
-        self.mouse_left_just_released = false;
-        self.mouse_right_just_pressed = false;
-        self.mouse_middle_just_pressed = false;
+        // reset one-frame flags
+        self.mouse.left_just_pressed = false;
+        self.mouse.left_just_released = false;
+        self.mouse.right_just_pressed = false;
+        self.mouse.middle_just_pressed = false;
     }
 }
-
-// winit ApplicationHandler
 
 impl<A: App> ApplicationHandler<Wake> for Runner<A> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -405,15 +380,12 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
         }
         self.fonts = Some(fonts);
 
-        // fire start() tasks
         let tasks = self.app.start();
         self.spawn_tasks(tasks);
-
         self.window().request_redraw();
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: Wake) {
-        // a background task finished and sent an action — drain the channel
         self.drain_channel();
     }
 
@@ -427,10 +399,10 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
             WindowEvent::CursorMoved { position, .. } => {
                 let x = (position.x / self.scale_factor) as f32;
                 let y = (position.y / self.scale_factor) as f32;
-                let dx = x - self.mouse_x;
-                let dy = y - self.mouse_y;
-                self.mouse_x = x;
-                self.mouse_y = y;
+                let dx = x - self.mouse.x;
+                let dy = y - self.mouse.y;
+                self.mouse.x = x;
+                self.mouse.y = y;
                 self.dispatch_event(Event::MouseMoved { x, y, dx, dy });
                 self.window().request_redraw();
             }
@@ -445,21 +417,21 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                 if let Some(btn) = btn {
                     match btn {
                         MouseButton::Left => {
-                            self.mouse_left_just_pressed = pressed && !self.mouse_left_pressed;
-                            self.mouse_left_just_released = !pressed && self.mouse_left_pressed;
-                            self.mouse_left_pressed = pressed;
+                            self.mouse.left_just_pressed = pressed && !self.mouse.left_pressed;
+                            self.mouse.left_just_released = !pressed && self.mouse.left_pressed;
+                            self.mouse.left_pressed = pressed;
                         }
                         MouseButton::Right => {
-                            self.mouse_right_just_pressed = pressed && !self.mouse_right_pressed;
-                            self.mouse_right_pressed = pressed;
+                            self.mouse.right_just_pressed = pressed && !self.mouse.right_pressed;
+                            self.mouse.right_pressed = pressed;
                         }
                         MouseButton::Middle => {
-                            self.mouse_middle_just_pressed = pressed && !self.mouse_middle_pressed;
-                            self.mouse_middle_pressed = pressed;
+                            self.mouse.middle_just_pressed = pressed && !self.mouse.middle_pressed;
+                            self.mouse.middle_pressed = pressed;
                         }
                     }
-                    let x = self.mouse_x;
-                    let y = self.mouse_y;
+                    let x = self.mouse.x;
+                    let y = self.mouse.y;
                     if pressed {
                         self.dispatch_event(Event::MousePressed { button: btn, x, y });
                     } else {
@@ -503,7 +475,6 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                         }
                     };
 
-                    // forward to focused text input first — consumes the event if handled
                     let mut consumed = false;
                     if let Some(id) = &self.focused_input_id.clone() {
                         let current_value = ti::get_cached_value(&self.state, id);
@@ -521,7 +492,6 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                             {
                                 let tasks = self.app.update(action);
                                 self.spawn_tasks(tasks);
-                            } else {
                             }
                             self.window().request_redraw();
                         } else if matches!(
