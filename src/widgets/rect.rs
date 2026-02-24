@@ -5,6 +5,7 @@ use crate::layout::{margin_to_rect_lpa, style_to_taffy};
 use crate::{Color, Edges, Fonts, Interactions, Layout, Margin, Overflow, Style, Val};
 
 pub struct Rect<M: Clone + 'static> {
+    pub id: Option<String>,
     pub color: Color,
     pub layout: Layout,
     pub style: Style,
@@ -16,6 +17,7 @@ pub struct Rect<M: Clone + 'static> {
 impl<M: Clone + 'static> Rect<M> {
     pub fn new(color: Color) -> Self {
         Self {
+            id: None,
             color,
             layout: Layout::default(),
             style: Style::default(),
@@ -23,6 +25,11 @@ impl<M: Clone + 'static> Rect<M> {
             w: 0.0,
             h: 0.0,
         }
+    }
+
+    pub fn id(mut self, id: &str) -> Self {
+        self.id = Some(id.to_string());
+        self
     }
 
     pub fn draw(&mut self, ctx: &mut DrawCtx<M>) {

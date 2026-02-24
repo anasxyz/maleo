@@ -14,12 +14,14 @@ pub struct TextInputState {
     pub scroll_offset: f32,
     pub selection_anchor: Option<usize>,
     pub dragging: bool,
+    pub cached_value: String,
 }
 
+// callback stored per-frame in the callbacks map
 pub(crate) struct TextInputCallback<M>(pub Box<dyn Fn(String) -> M>);
 
 pub struct TextInput<M: Clone + 'static> {
-    pub id: String,
+    pub id: Option<String>,
     pub placeholder: String,
     pub placeholder_color: Option<Color>,
     pub font: Option<String>,
@@ -37,9 +39,9 @@ pub struct TextInput<M: Clone + 'static> {
 }
 
 impl<M: Clone + 'static> TextInput<M> {
-    pub fn new(id: &str) -> Self {
+    pub fn new() -> Self {
         Self {
-            id: id.to_string(),
+            id: None,
             placeholder: String::new(),
             placeholder_color: None,
             font: None,
@@ -57,16 +59,35 @@ impl<M: Clone + 'static> TextInput<M> {
         }
     }
 
+    pub fn id(mut self, id: &str) -> Self {
+        self.id = Some(id.to_string());
+        self
+    }
+
+    fn require_id(&self) -> &str {
+        self.id
+            .as_deref()
+            .expect("TextInput requires an id — use .id(\"my_input\")")
+    }
+
     pub fn draw(&mut self, ctx: &mut DrawCtx<M>) {
+        let id = self.require_id().to_string();
+        let id = id.as_str();
         let (x, y, w, h) = (self.x, self.y, self.w, self.h);
         if is_outside(x, y, w, h, ctx.clip) {
             return;
         }
 
         let value_str = self.value.as_deref().unwrap_or("");
-        cache_value(ctx.state, &self.id, value_str);
+
+        // cache the current value into state so app.rs can read it on key events
+        ctx.state
+            .get_or_default_mut::<TextInputState>(id)
+            .cached_value = value_str.to_string();
+
+        // register callback for this frame
         if let Some(cb) = self.on_change.take() {
-            register_callback(ctx.state, &self.id, cb);
+            ctx.state.set_callback(id, TextInputCallback(cb));
         }
 
         let hovered =
@@ -78,17 +99,15 @@ impl<M: Clone + 'static> TextInput<M> {
 
         update_focus_and_drag(
             ctx.state,
-            &self.id,
+            id,
             hovered,
             ctx.mouse.left_just_pressed,
             ctx.mouse.left_pressed,
         );
-        let focused = ctx.state.get_or_default::<TextInputState>(&self.id).focused;
-        ctx.state
-            .get_or_default_mut::<TextInputState>(&self.id)
-            .cursor = ctx
+        let focused = ctx.state.get_or_default::<TextInputState>(id).focused;
+        ctx.state.get_or_default_mut::<TextInputState>(id).cursor = ctx
             .state
-            .get_or_default::<TextInputState>(&self.id)
+            .get_or_default::<TextInputState>(id)
             .cursor
             .min(value_str.len());
 
@@ -126,7 +145,7 @@ impl<M: Clone + 'static> TextInput<M> {
 
         update_scroll(
             ctx.state,
-            &self.id,
+            id,
             value_str,
             font_id,
             size,
@@ -134,15 +153,12 @@ impl<M: Clone + 'static> TextInput<M> {
             text_area_w,
             ctx.fonts,
         );
-        let scroll = ctx
-            .state
-            .get_or_default::<TextInputState>(&self.id)
-            .scroll_offset;
+        let scroll = ctx.state.get_or_default::<TextInputState>(id).scroll_offset;
         let scroll_snapped = (scroll * sc).floor() / sc;
 
         handle_mouse(
             ctx,
-            &self.id,
+            id,
             value_str,
             font_id,
             size,
@@ -153,14 +169,14 @@ impl<M: Clone + 'static> TextInput<M> {
         );
 
         // re-read after mouse handling may have mutated state this frame
-        let cursor_pos = ctx.state.get_or_default::<TextInputState>(&self.id).cursor;
+        let cursor_pos = ctx.state.get_or_default::<TextInputState>(id).cursor;
         let (cursor_x_abs, _) =
             ctx.fonts
                 .measure_sized(&value_str[..cursor_pos], font_id, size, self.font_weight);
         let cursor_x_snapped = (cursor_x_abs * sc).floor() / sc;
         let selection_anchor = ctx
             .state
-            .get_or_default::<TextInputState>(&self.id)
+            .get_or_default::<TextInputState>(id)
             .selection_anchor;
         let has_selection = selection_anchor.map_or(false, |a| a != cursor_pos);
 
@@ -726,48 +742,29 @@ fn selection_range(cursor: usize, anchor: Option<usize>) -> (usize, usize) {
 
 // state helpers used by app.rs for keyboard handling
 
-pub(crate) fn register_callback<M: Clone + 'static>(
-    state: &mut StateStore,
-    id: &str,
-    callback: Box<dyn Fn(String) -> M>,
-) {
-    state.set_raw(id, TextInputCallback(callback));
-}
-
 pub(crate) fn call_callback<M: Clone + 'static>(
     state: &StateStore,
     id: &str,
     value: String,
 ) -> Option<M> {
-    let cb = state.get_raw::<TextInputCallback<M>>(id)?;
+    let cb = state.get_callback::<TextInputCallback<M>>(id)?;
     Some((cb.0)(value))
 }
 
-pub(crate) fn cache_value(state: &mut StateStore, id: &str, value: &str) {
-    state.set_string(id, value);
-}
-
-pub(crate) fn get_cached_value(state: &StateStore, id: &str) -> String {
-    state.get_string(id)
-}
-
 pub(crate) fn find_focused(state: &StateStore) -> Option<String> {
-    state.find_by_type::<TextInputState, _>(|s| s.focused)
+    state.find::<TextInputState, _>(|s| s.focused)
 }
 
-pub fn handle_key(
-    state: &mut StateStore,
-    id: &str,
-    current_value: &str,
-    event: &Event,
-    text: &str,
-) -> Option<String> {
+pub fn handle_key(state: &mut StateStore, id: &str, event: &Event, text: &str) -> Option<String> {
     let focused = state.get_or_default::<TextInputState>(id).focused;
     if !focused {
         return None;
     }
 
-    let mut value = current_value.to_string();
+    let mut value = state
+        .get_or_default::<TextInputState>(id)
+        .cached_value
+        .clone();
     let mut cursor = state
         .get_or_default::<TextInputState>(id)
         .cursor
@@ -861,7 +858,7 @@ pub fn handle_key(
     s.cursor = cursor;
     s.selection_anchor = selection_anchor;
     if changed {
-        cache_value(state, id, &value);
+        s.cached_value = value.clone();
         Some(value)
     } else {
         None

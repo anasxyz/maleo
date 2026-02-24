@@ -5,6 +5,7 @@ use crate::layout::{align_to_self, margin_to_rect_lpa};
 use crate::{Align, Color, Fonts, Interactions, Layout, Margin, Style, TextAlign, Val};
 
 pub struct Text<M: Clone + 'static> {
+    pub id: Option<String>,
     pub content: String,
     pub color: Color,
     pub font: Option<String>,
@@ -21,6 +22,7 @@ pub struct Text<M: Clone + 'static> {
 impl<M: Clone + 'static> Text<M> {
     pub fn new(content: &str, color: Color) -> Self {
         Self {
+            id: None,
             content: content.to_string(),
             color,
             font: None,
@@ -33,6 +35,11 @@ impl<M: Clone + 'static> Text<M> {
             interactions: Interactions::default(),
             w: 0.0,
         }
+    }
+
+    pub fn id(mut self, id: &str) -> Self {
+        self.id = Some(id.to_string());
+        self
     }
 
     pub fn draw(&mut self, ctx: &mut DrawCtx<M>) {

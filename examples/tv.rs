@@ -98,7 +98,8 @@ impl App for MyApp {
             tab,
             // 1px line under tab
             rect(divider).width(percent(100.0)).height(px(1.0)),
-            text_editor("body")
+            text_editor()
+                .id("body")
                 .value(&self.notes)
                 .on_change(|v| Action::UpdateNotes(v))
                 .placeholder("// start typing...💁👌🎍😍 السَّلَامُ عَلَيْكُمْ")
@@ -145,8 +146,13 @@ impl App for MyApp {
 
     fn event(&mut self, event: Event) -> Option<Action> {
         match event {
-            Event::KeyPressed { key: Key::Up, ctrl: true, .. } => Some(Action::IncreaseFontSize),
-            Event::KeyPressed { key: Key::Down, .. } => Some(Action::DecreaseFontSize),
+            Event::KeyPressed { key, modifiers, .. } => {
+                match key {
+                    Key::Up if modifiers.ctrl => Some(Action::IncreaseFontSize),
+                    Key::Down if modifiers.ctrl => Some(Action::DecreaseFontSize),
+                    _ => None,
+                }
+            },
             _ => None,
         }
     }

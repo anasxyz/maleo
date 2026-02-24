@@ -379,6 +379,20 @@ pub enum Element<M: Clone + 'static = ()> {
 // forwarding methods on Element so button("label").on_click(...) etc. keep working
 
 impl<M: Clone + 'static> Element<M> {
+    // id — forwarded to all widgets
+    pub fn id(self, id: &str) -> Self {
+        match self {
+            Element::Rect(w) => Element::Rect(w.id(id)),
+            Element::Text(w) => Element::Text(w.id(id)),
+            Element::Button(w) => Element::Button(w.id(id)),
+            Element::TextInput(w) => Element::TextInput(w.id(id)),
+            Element::TextEditor(w) => Element::TextEditor(w.id(id)),
+            Element::Row(w) => Element::Row(w.id(id)),
+            Element::Column(w) => Element::Column(w.id(id)),
+            other => other,
+        }
+    }
+
     // interactions
     pub fn on_click(self, msg: M) -> Self {
         match self {
@@ -734,12 +748,12 @@ pub fn button<M: Clone + 'static>(label: &str) -> Element<M> {
     Element::Button(Button::new(label))
 }
 
-pub fn text_input<M: Clone + 'static>(id: &str) -> Element<M> {
-    Element::TextInput(TextInput::new(id))
+pub fn text_input<M: Clone + 'static>() -> Element<M> {
+    Element::TextInput(TextInput::new())
 }
 
-pub fn text_editor<M: Clone + 'static>(id: &str) -> Element<M> {
-    Element::TextEditor(TextEditor::new(id))
+pub fn text_editor<M: Clone + 'static>() -> Element<M> {
+    Element::TextEditor(TextEditor::new())
 }
 
 pub fn row<M: Clone + 'static>(children: Vec<Element<M>>) -> Element<M> {

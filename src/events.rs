@@ -1,49 +1,29 @@
 use winit::keyboard::KeyCode;
 
-// discrete event — one thing that happened, fired once
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Modifiers {
+    pub ctrl: bool,
+    pub shift: bool,
+    pub alt: bool,
+}
+
+// discrete event 
+// one thing that happened, fired once
 #[derive(Debug, Clone)]
 pub enum Event {
-    // keyboard — modifiers baked in so combos work cleanly
-    KeyPressed {
-        key: Key,
-        ctrl: bool,
-        shift: bool,
-        alt: bool,
-    },
-    KeyReleased {
-        key: Key,
-        ctrl: bool,
-        shift: bool,
-        alt: bool,
-    },
+    // keyboard
+    // modifiers baked in so combos work cleanly
+    KeyPressed { key: Key, modifiers: Modifiers },
+    KeyReleased { key: Key, modifiers: Modifiers },
 
     // mouse
-    MouseMoved {
-        x: f32,
-        y: f32,
-        dx: f32,
-        dy: f32,
-    },
-    MousePressed {
-        button: MouseButton,
-        x: f32,
-        y: f32,
-    },
-    MouseReleased {
-        button: MouseButton,
-        x: f32,
-        y: f32,
-    },
-    MouseScrolled {
-        x: f32,
-        y: f32,
-    },
+    MouseMoved { x: f32, y: f32, dx: f32, dy: f32 },
+    MousePressed { button: MouseButton, x: f32, y: f32 },
+    MouseReleased { button: MouseButton, x: f32, y: f32 },
+    MouseScrolled { x: f32, y: f32 },
 
     // window
-    Resized {
-        width: f32,
-        height: f32,
-    },
+    Resized { width: f32, height: f32 },
     ScaleChanged(f64),
     Focused,
     Unfocused,
