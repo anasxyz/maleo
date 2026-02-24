@@ -324,7 +324,7 @@ impl<A: App> Runner<A> {
                             r: clear.r as f64,
                             g: clear.g as f64,
                             b: clear.b as f64,
-                            a: 1.0,
+                            a: clear.a as f64,
                         }),
                         store: wgpu::StoreOp::Store,
                     },
@@ -390,7 +390,8 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                         .with_inner_size(winit::dpi::LogicalSize::new(
                             self.init.width,
                             self.init.height,
-                        )),
+                        ))
+                        .with_transparent(true),
                 )
                 .unwrap(),
         );
