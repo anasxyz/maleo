@@ -11,7 +11,7 @@ use winit::{
 };
 
 use crate::draw::{Cursor, MouseState, draw};
-use crate::events::{Event, Key, MouseButton};
+use crate::events::{Event, Key, Modifiers, MouseButton};
 use crate::layout::do_layout;
 use crate::state::StateStore;
 use crate::task::Task;
@@ -149,18 +149,7 @@ impl Gfx {
     }
 }
 
-// modifiers
-// keyboard modifier key state
-
-#[derive(Default, Clone, Copy)]
-struct Modifiers {
-    ctrl: bool,
-    shift: bool,
-    alt: bool,
-}
-
-// tasks 
-// async task stuff
+// Tasks — async task machinery
 
 struct Tasks<Action: Clone + Send + 'static> {
     tx: UnboundedSender<Action>,
@@ -220,7 +209,7 @@ enum FocusedWidget {
     TextEditor(String),
 }
 
-// Runner
+// runner
 
 struct Runner<A: App> {
     app: A,
@@ -534,21 +523,11 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                         _ => {}
                     }
 
-                    let Modifiers { ctrl, shift, alt } = self.modifiers;
+                    let modifiers = self.modifiers;
                     let bento_event = if pressed {
-                        Event::KeyPressed {
-                            key,
-                            ctrl,
-                            shift,
-                            alt,
-                        }
+                        Event::KeyPressed { key, modifiers }
                     } else {
-                        Event::KeyReleased {
-                            key,
-                            ctrl,
-                            shift,
-                            alt,
-                        }
+                        Event::KeyReleased { key, modifiers }
                     };
 
                     // app gets first priority, if it handles the event, the widget doesnt see it
@@ -564,7 +543,7 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                     // if app didnt consume it and a text widget is focused, route to the widget
                     if !app_consumed {
                         if let Some(focused) = &self.focused_widget {
-                            let text = if pressed && !ctrl {
+                            let text = if pressed && !self.modifiers.ctrl {
                                 event.text.as_ref().map(|t| t.as_str()).unwrap_or("")
                             } else {
                                 ""

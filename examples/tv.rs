@@ -146,8 +146,13 @@ impl App for MyApp {
 
     fn event(&mut self, event: Event) -> Option<Action> {
         match event {
-            Event::KeyPressed { key: Key::Up, ctrl: true, .. } => Some(Action::IncreaseFontSize),
-            Event::KeyPressed { key: Key::Down, ctrl: true, .. } => Some(Action::DecreaseFontSize),
+            Event::KeyPressed { key, modifiers, .. } => {
+                match key {
+                    Key::Up if modifiers.ctrl => Some(Action::IncreaseFontSize),
+                    Key::Down if modifiers.ctrl => Some(Action::DecreaseFontSize),
+                    _ => None,
+                }
+            },
             _ => None,
         }
     }
