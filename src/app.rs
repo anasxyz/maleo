@@ -92,37 +92,140 @@ fn run<A: App>(settings: Settings) {
     let (tx, rx) = unbounded_channel::<A::Action>();
 
     event_loop
-        .run_app(&mut Runner::new(A::new(), settings, proxy, tx, rx, rt))
+        .run_app(&mut Runner::new(A::new(), settings, proxy, tx, rx))
         .unwrap();
 }
 
-// runner
+// gfx
+// all rendering resources, initialised on first resumed() call
 
-struct Runner<A: App> {
-    app: A,
-    title: String,
-    width: u32,
-    height: u32,
-    window: Option<Arc<Window>>,
-    gpu: Option<GpuContext>,
+struct Gfx {
+    window: Arc<Window>,
+    gpu: GpuContext,
     scale_factor: f64,
-    text_renderer: Option<TextRenderer>,
-    shape_renderer: Option<ShapeRenderer>,
-    shadow_renderer: Option<ShadowRenderer>,
-    fonts: Option<Fonts>,
-    state: StateStore,
-    focused_input_id: Option<String>,
+    text_renderer: TextRenderer,
+    shape_renderer: ShapeRenderer,
+    shadow_renderer: ShadowRenderer,
+    fonts: Fonts,
     clear_color: Color,
-    proxy: EventLoopProxy<Wake>,
-    tx: UnboundedSender<A::Action>,
-    rx: UnboundedReceiver<A::Action>,
-    rt: tokio::runtime::Runtime,
-    mouse: MouseState,
-    exclusive_tasks: HashMap<u64, tokio::task::AbortHandle>,
     current_cursor: Cursor,
+}
+
+impl Gfx {
+    fn logical_size(&self) -> (f32, f32) {
+        let w = (self.gpu.config.width as f64 / self.scale_factor) as f32;
+        let h = (self.gpu.config.height as f64 / self.scale_factor) as f32;
+        (w, h)
+    }
+
+    fn resize(&mut self, width: u32, height: u32) {
+        self.gpu.resize(width, height);
+        let (w, h) = self.logical_size();
+        self.text_renderer.resize(w, h, self.scale_factor);
+        self.shape_renderer.resize(w, h);
+        self.shadow_renderer
+            .resize(&self.gpu.device, &self.gpu.queue, w, h);
+    }
+
+    fn set_cursor(&mut self, cursor: Cursor) {
+        if cursor == self.current_cursor {
+            return;
+        }
+        self.current_cursor = cursor;
+        let icon = match cursor {
+            Cursor::Default => winit::window::CursorIcon::Default,
+            Cursor::Text => winit::window::CursorIcon::Text,
+            Cursor::Pointer => winit::window::CursorIcon::Pointer,
+            Cursor::Crosshair => winit::window::CursorIcon::Crosshair,
+            Cursor::Move => winit::window::CursorIcon::Move,
+            Cursor::ResizeNS => winit::window::CursorIcon::NsResize,
+            Cursor::ResizeEW => winit::window::CursorIcon::EwResize,
+            Cursor::NotAllowed => winit::window::CursorIcon::NotAllowed,
+            Cursor::Grab => winit::window::CursorIcon::Grab,
+            Cursor::Grabbing => winit::window::CursorIcon::Grabbing,
+            Cursor::Wait => winit::window::CursorIcon::Wait,
+        };
+        self.window.set_cursor(icon);
+    }
+}
+
+// modifiers
+// keyboard modifier key state
+
+#[derive(Default, Clone, Copy)]
+struct Modifiers {
     ctrl: bool,
     shift: bool,
     alt: bool,
+}
+
+// tasks
+// async task stuff
+
+struct Tasks<Action: Clone + Send + 'static> {
+    tx: UnboundedSender<Action>,
+    rx: UnboundedReceiver<Action>,
+    proxy: EventLoopProxy<Wake>,
+    exclusive: HashMap<u64, tokio::task::AbortHandle>,
+}
+
+impl<Action: Clone + Send + 'static> Tasks<Action> {
+    fn new(
+        tx: UnboundedSender<Action>,
+        rx: UnboundedReceiver<Action>,
+        proxy: EventLoopProxy<Wake>,
+    ) -> Self {
+        Self {
+            tx,
+            rx,
+            proxy,
+            exclusive: HashMap::new(),
+        }
+    }
+
+    fn spawn(&mut self, tasks: Vec<Task<Action>>) {
+        for task in tasks {
+            let exclusive_key = task.exclusive_key;
+            if let Some(key) = exclusive_key {
+                if let Some(old) = self.exclusive.remove(&key) {
+                    old.abort();
+                }
+            }
+            let tx = self.tx.clone();
+            let proxy = self.proxy.clone();
+            let send = Arc::new(move |action| {
+                let _ = tx.send(action);
+                let _ = proxy.send_event(Wake);
+            });
+            task.spawn(send, |handle| {
+                if let Some(key) = exclusive_key {
+                    self.exclusive.insert(key, handle);
+                }
+            });
+        }
+    }
+
+    fn drain(&mut self) -> Vec<Action> {
+        let mut actions = vec![];
+        while let Ok(action) = self.rx.try_recv() {
+            actions.push(action);
+        }
+        actions
+    }
+}
+
+// Runner
+
+struct Runner<A: App> {
+    app: A,
+    gfx: Option<Gfx>,
+    init: Settings,
+    state: StateStore,
+    mouse: MouseState,
+    modifiers: Modifiers,
+    focused_input_id: Option<String>,
+    tasks: Tasks<A::Action>,
+    // used for double-click detection
     start_time: std::time::Instant,
     last_left_click_time: f64,
 }
@@ -134,27 +237,12 @@ impl<A: App> Runner<A> {
         proxy: EventLoopProxy<Wake>,
         tx: UnboundedSender<A::Action>,
         rx: UnboundedReceiver<A::Action>,
-        rt: tokio::runtime::Runtime,
     ) -> Self {
         Self {
             app,
-            title: settings.title,
-            width: settings.width,
-            height: settings.height,
-            window: None,
-            gpu: None,
-            scale_factor: 1.0,
-            text_renderer: None,
-            shape_renderer: None,
-            shadow_renderer: None,
-            fonts: None,
+            gfx: None,
+            init: settings,
             state: StateStore::new(),
-            focused_input_id: None,
-            clear_color: settings.clear_color,
-            proxy,
-            tx,
-            rx,
-            rt,
             mouse: MouseState {
                 x: 0.0,
                 y: 0.0,
@@ -169,138 +257,71 @@ impl<A: App> Runner<A> {
                 left_click_x: 0.0,
                 left_click_y: 0.0,
             },
-            exclusive_tasks: HashMap::new(),
-            current_cursor: Cursor::Default,
-            ctrl: false,
-            shift: false,
-            alt: false,
+            modifiers: Modifiers::default(),
+            focused_input_id: None,
+            tasks: Tasks::new(tx, rx, proxy),
             start_time: std::time::Instant::now(),
             last_left_click_time: -1.0,
         }
     }
 
-    fn window(&self) -> &Window {
-        self.window.as_ref().unwrap()
-    }
-    fn gpu(&self) -> &GpuContext {
-        self.gpu.as_ref().unwrap()
-    }
-    fn gpu_mut(&mut self) -> &mut GpuContext {
-        self.gpu.as_mut().unwrap()
+    fn gfx(&self) -> &Gfx {
+        self.gfx.as_ref().unwrap()
     }
 
-    fn logical_size(&self) -> (f32, f32) {
-        let gpu = self.gpu();
-        (
-            (gpu.config.width as f64 / self.scale_factor) as f32,
-            (gpu.config.height as f64 / self.scale_factor) as f32,
-        )
-    }
-
-    fn on_resize(&mut self, w: f32, h: f32) {
-        if let Some(tr) = self.text_renderer.as_mut() {
-            tr.resize(w, h, self.scale_factor);
-        }
-        if let Some(sr) = self.shape_renderer.as_mut() {
-            sr.resize(w, h);
-        }
-    }
-
-    fn resize_shadow(&mut self, w: f32, h: f32) {
-        let gpu = self.gpu.as_ref().unwrap();
-        if let Some(sr) = self.shadow_renderer.as_mut() {
-            sr.resize(&gpu.device, &gpu.queue, w, h);
-        }
-    }
-
-    fn spawn_tasks(&mut self, tasks: Vec<Task<A::Action>>) {
-        for task in tasks {
-            let exclusive_key = task.exclusive_key;
-            if let Some(key) = exclusive_key {
-                if let Some(old_handle) = self.exclusive_tasks.remove(&key) {
-                    old_handle.abort();
-                }
-            }
-            let tx = self.tx.clone();
-            let proxy = self.proxy.clone();
-            let send = Arc::new(move |action| {
-                let _ = tx.send(action);
-                let _ = proxy.send_event(Wake);
-            });
-            let exclusive_tasks = &mut self.exclusive_tasks;
-            task.spawn(send, |handle| {
-                if let Some(key) = exclusive_key {
-                    exclusive_tasks.insert(key, handle);
-                }
-            });
-        }
+    fn gfx_mut(&mut self) -> &mut Gfx {
+        self.gfx.as_mut().unwrap()
     }
 
     fn dispatch_event(&mut self, event: Event) {
         if let Some(action) = self.app.event(event) {
             let tasks = self.app.update(action);
-            self.spawn_tasks(tasks);
-            self.window().request_redraw();
+            self.tasks.spawn(tasks);
+            self.gfx().window.request_redraw();
         }
     }
 
     fn drain_channel(&mut self) {
-        let mut any = false;
-        while let Ok(action) = self.rx.try_recv() {
+        let actions = self.tasks.drain();
+        let had_any = !actions.is_empty();
+        for action in actions {
             let tasks = self.app.update(action);
-            self.spawn_tasks(tasks);
-            any = true;
+            self.tasks.spawn(tasks);
         }
-        if any {
-            self.window().request_redraw();
+        if had_any {
+            self.gfx().window.request_redraw();
         }
     }
 
     fn render(&mut self) {
-        let frame = match self.gpu_mut().begin_frame() {
+        let gfx = self.gfx.as_mut().unwrap();
+
+        let frame = match gfx.gpu.begin_frame() {
             Ok(f) => f,
             Err(_) => return,
         };
 
         let (mut encoder, finisher, view) = frame.begin();
-        let (width, height) = self.logical_size();
+        let (width, height) = gfx.logical_size();
 
         let mut tree = self.app.view();
-        do_layout(&mut tree, width, height, self.fonts.as_mut().unwrap());
+        do_layout(&mut tree, width, height, &mut gfx.fonts);
 
         let (actions, cursor) = draw(
             &mut tree,
-            self.shape_renderer.as_mut().unwrap(),
-            self.shadow_renderer.as_mut().unwrap(),
-            self.text_renderer.as_mut().unwrap(),
-            self.fonts.as_mut().unwrap(),
+            &mut gfx.shape_renderer,
+            &mut gfx.shadow_renderer,
+            &mut gfx.text_renderer,
+            &mut gfx.fonts,
             &mut self.state,
             &self.mouse,
-            self.scale_factor as f32,
+            gfx.scale_factor as f32,
         );
 
-        let resolved_cursor = cursor.unwrap_or(Cursor::Default);
-        if resolved_cursor != self.current_cursor {
-            self.current_cursor = resolved_cursor;
-            let winit_cursor = match resolved_cursor {
-                Cursor::Default => winit::window::CursorIcon::Default,
-                Cursor::Text => winit::window::CursorIcon::Text,
-                Cursor::Pointer => winit::window::CursorIcon::Pointer,
-                Cursor::Crosshair => winit::window::CursorIcon::Crosshair,
-                Cursor::Move => winit::window::CursorIcon::Move,
-                Cursor::ResizeNS => winit::window::CursorIcon::NsResize,
-                Cursor::ResizeEW => winit::window::CursorIcon::EwResize,
-                Cursor::NotAllowed => winit::window::CursorIcon::NotAllowed,
-                Cursor::Grab => winit::window::CursorIcon::Grab,
-                Cursor::Grabbing => winit::window::CursorIcon::Grabbing,
-                Cursor::Wait => winit::window::CursorIcon::Wait,
-            };
-            self.window().set_cursor(winit_cursor);
-        }
+        gfx.set_cursor(cursor.unwrap_or(Cursor::Default));
 
         {
-            let gpu = self.gpu.as_ref().unwrap();
-            let clear = self.clear_color;
+            let clear = gfx.clear_color;
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -321,38 +342,34 @@ impl<A: App> Runner<A> {
                 occlusion_query_set: None,
             });
 
-            self.shadow_renderer
-                .as_mut()
-                .unwrap()
-                .render(&gpu.device, &gpu.queue, &mut pass);
-            self.shape_renderer
-                .as_mut()
-                .unwrap()
-                .render(&gpu.device, &gpu.queue, &mut pass);
-            self.text_renderer.as_mut().unwrap().render(
-                &mut self.fonts.as_mut().unwrap().font_system,
+            gfx.shadow_renderer
+                .render(&gfx.gpu.device, &gfx.gpu.queue, &mut pass);
+            gfx.shape_renderer
+                .render(&gfx.gpu.device, &gfx.gpu.queue, &mut pass);
+            gfx.text_renderer.render(
+                &mut gfx.fonts.font_system,
                 width,
                 height,
-                self.scale_factor,
-                &gpu.device,
-                &gpu.queue,
+                gfx.scale_factor,
+                &gfx.gpu.device,
+                &gfx.gpu.queue,
                 &mut pass,
             );
         }
 
-        self.shadow_renderer.as_mut().unwrap().clear();
-        self.shape_renderer.as_mut().unwrap().clear();
-        self.text_renderer.as_mut().unwrap().clear();
-        self.text_renderer.as_mut().unwrap().trim_atlas();
-        finisher.present(encoder, &self.gpu().queue);
+        gfx.shadow_renderer.clear();
+        gfx.shape_renderer.clear();
+        gfx.text_renderer.clear();
+        gfx.text_renderer.trim_atlas();
+        finisher.present(encoder, &gfx.gpu.queue);
 
         let had_actions = !actions.is_empty();
         for action in actions {
             let tasks = self.app.update(action);
-            self.spawn_tasks(tasks);
+            self.tasks.spawn(tasks);
         }
         if had_actions {
-            self.window().request_redraw();
+            self.gfx().window.request_redraw();
         }
 
         self.focused_input_id =
@@ -368,7 +385,7 @@ impl<A: App> Runner<A> {
 
 impl<A: App> ApplicationHandler<Wake> for Runner<A> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_some() {
+        if self.gfx.is_some() {
             return;
         }
 
@@ -376,44 +393,48 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
             event_loop
                 .create_window(
                     Window::default_attributes()
-                        .with_title(&self.title)
-                        .with_inner_size(winit::dpi::LogicalSize::new(self.width, self.height)),
+                        .with_title(&self.init.title)
+                        .with_inner_size(winit::dpi::LogicalSize::new(
+                            self.init.width,
+                            self.init.height,
+                        )),
                 )
                 .unwrap(),
         );
 
-        self.scale_factor = window.scale_factor();
-        self.gpu = Some(pollster::block_on(GpuContext::new(window.clone())));
-        self.window = Some(window);
+        let scale_factor = window.scale_factor();
+        let gpu = pollster::block_on(GpuContext::new(window.clone()));
 
-        let (w, h, format) = {
-            let gpu = self.gpu();
-            let w = (gpu.config.width as f64 / self.scale_factor) as f32;
-            let h = (gpu.config.height as f64 / self.scale_factor) as f32;
-            (w, h, gpu.format)
-        };
+        let w = (gpu.config.width as f64 / scale_factor) as f32;
+        let h = (gpu.config.height as f64 / scale_factor) as f32;
+        let format = gpu.format;
 
-        {
-            let gpu = self.gpu.as_ref().unwrap();
-            let mut text_renderer = TextRenderer::new(&gpu.device, &gpu.queue, format);
-            text_renderer.resize(w, h, self.scale_factor);
-            let shape_renderer = ShapeRenderer::new(&gpu.device, format, w, h);
-            let shadow_renderer = ShadowRenderer::new(&gpu.device, &gpu.queue, format, w, h);
-            self.text_renderer = Some(text_renderer);
-            self.shape_renderer = Some(shape_renderer);
-            self.shadow_renderer = Some(shadow_renderer);
-        }
+        let mut text_renderer = TextRenderer::new(&gpu.device, &gpu.queue, format);
+        text_renderer.resize(w, h, scale_factor);
+        let shape_renderer = ShapeRenderer::new(&gpu.device, format, w, h);
+        let shadow_renderer = ShadowRenderer::new(&gpu.device, &gpu.queue, format, w, h);
 
         let mut fonts = Fonts::new();
         self.app.fonts(&mut fonts);
         if fonts.default.is_none() {
             fonts.add("default", "Arial", 14.0).default();
         }
-        self.fonts = Some(fonts);
+
+        self.gfx = Some(Gfx {
+            window,
+            gpu,
+            scale_factor,
+            text_renderer,
+            shape_renderer,
+            shadow_renderer,
+            fonts,
+            clear_color: self.init.clear_color,
+            current_cursor: Cursor::Default,
+        });
 
         let tasks = self.app.start();
-        self.spawn_tasks(tasks);
-        self.window().request_redraw();
+        self.tasks.spawn(tasks);
+        self.gfx().window.request_redraw();
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: Wake) {
@@ -421,21 +442,22 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-        if self.window.is_none() {
+        if self.gfx.is_none() {
             return;
         }
         event_loop.set_control_flow(ControlFlow::Wait);
 
         match event {
             WindowEvent::CursorMoved { position, .. } => {
-                let x = (position.x / self.scale_factor) as f32;
-                let y = (position.y / self.scale_factor) as f32;
+                let scale = self.gfx().scale_factor;
+                let x = (position.x / scale) as f32;
+                let y = (position.y / scale) as f32;
                 let dx = x - self.mouse.x;
                 let dy = y - self.mouse.y;
                 self.mouse.x = x;
                 self.mouse.y = y;
                 self.dispatch_event(Event::MouseMoved { x, y, dx, dy });
-                self.window().request_redraw();
+                self.gfx().window.request_redraw();
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let pressed = state == ElementState::Pressed;
@@ -486,7 +508,7 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                         self.dispatch_event(Event::MouseReleased { button: btn, x, y });
                     }
                 }
-                self.window().request_redraw();
+                self.gfx().window.request_redraw();
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let (x, y) = match delta {
@@ -494,19 +516,21 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                     MouseScrollDelta::PixelDelta(pos) => (pos.x as f32, pos.y as f32),
                 };
                 self.dispatch_event(Event::MouseScrolled { x, y });
-                self.window().request_redraw();
+                self.gfx().window.request_redraw();
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(key_code) = event.physical_key {
                     let key = crate::key_code_to_key(key_code);
                     let pressed = event.state == ElementState::Pressed;
+
                     match key {
-                        Key::LControl | Key::RControl => self.ctrl = pressed,
-                        Key::LShift | Key::RShift => self.shift = pressed,
-                        Key::LAlt | Key::RAlt => self.alt = pressed,
+                        Key::LControl | Key::RControl => self.modifiers.ctrl = pressed,
+                        Key::LShift | Key::RShift => self.modifiers.shift = pressed,
+                        Key::LAlt | Key::RAlt => self.modifiers.alt = pressed,
                         _ => {}
                     }
-                    let (ctrl, shift, alt) = (self.ctrl, self.shift, self.alt);
+
+                    let Modifiers { ctrl, shift, alt } = self.modifiers;
                     let bento_event = if pressed {
                         Event::KeyPressed {
                             key,
@@ -531,7 +555,6 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                             ""
                         };
 
-                        // Try TextInput first, then TextEditor
                         if let Some(new_value) =
                             ti::handle_key(&mut self.state, id, &bento_event, text)
                         {
@@ -540,9 +563,9 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                                 ti::call_callback::<A::Action>(&self.state, id, new_value)
                             {
                                 let tasks = self.app.update(action);
-                                self.spawn_tasks(tasks);
+                                self.tasks.spawn(tasks);
                             }
-                            self.window().request_redraw();
+                            self.gfx().window.request_redraw();
                         } else if let Some(new_value) =
                             te::handle_key(&mut self.state, id, &bento_event, text)
                         {
@@ -551,9 +574,9 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                                 te::call_callback::<A::Action>(&self.state, id, new_value)
                             {
                                 let tasks = self.app.update(action);
-                                self.spawn_tasks(tasks);
+                                self.tasks.spawn(tasks);
                             }
-                            self.window().request_redraw();
+                            self.gfx().window.request_redraw();
                         } else if matches!(
                             bento_event,
                             Event::KeyPressed {
@@ -569,7 +592,7 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                             }
                         ) {
                             consumed = true;
-                            self.window().request_redraw();
+                            self.gfx().window.request_redraw();
                         }
                     }
 
@@ -577,42 +600,35 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                         self.dispatch_event(bento_event);
                     }
                 }
-                self.window().request_redraw();
+                self.gfx().window.request_redraw();
             }
             WindowEvent::Focused(focused) => {
                 if !focused {
-                    self.ctrl = false;
-                    self.shift = false;
-                    self.alt = false;
+                    self.modifiers = Modifiers::default();
                 }
                 self.dispatch_event(if focused {
                     Event::Focused
                 } else {
                     Event::Unfocused
                 });
-                self.window().request_redraw();
+                self.gfx().window.request_redraw();
             }
             WindowEvent::Ime(winit::event::Ime::Commit(_)) => {}
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                self.scale_factor = scale_factor;
-                let size = self.window().inner_size();
-                self.gpu_mut().resize(size.width, size.height);
-                let (w, h) = self.logical_size();
-                self.on_resize(w, h);
-                self.resize_shadow(w, h);
+                let size = self.gfx().window.inner_size();
+                self.gfx_mut().scale_factor = scale_factor;
+                self.gfx_mut().resize(size.width, size.height);
                 self.dispatch_event(Event::ScaleChanged(scale_factor));
-                self.window().request_redraw();
+                self.gfx().window.request_redraw();
             }
             WindowEvent::Resized(size) => {
-                self.gpu_mut().resize(size.width, size.height);
-                let (w, h) = self.logical_size();
-                self.on_resize(w, h);
-                self.resize_shadow(w, h);
+                self.gfx_mut().resize(size.width, size.height);
+                let (w, h) = self.gfx().logical_size();
                 self.dispatch_event(Event::Resized {
                     width: w,
                     height: h,
                 });
-                self.window().request_redraw();
+                self.gfx().window.request_redraw();
             }
             WindowEvent::RedrawRequested => {
                 self.drain_channel();
