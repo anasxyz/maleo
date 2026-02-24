@@ -1,18 +1,26 @@
-<h1 align="left">Bento</h1> 
-<p align="left">Cross-platform rust GUI framework with Elm-style architecture</p>
+<h1 align="center">Bento</h1> 
+<p align="center"><strong>Rust GUI framework</strong></p>
 
 ## Features
 
-* Simple and easy to use API
-* Cross-platform 
-* GPU accelerated rendering
-* Elm inspired architecture
-* Flexbox layout engine
+* Architecture inspired by [Elm](https://github.com/elm) and [Iced](https://github.com/iced-rs/iced)
+* Intuitive declarative API
+* Cross-platform, runs on Windows, macOS, and Linux
+* GPU-accelerated rendering via a custom wgpu based rendering layer
+* Flexbox layout engine with support for grow, shrink, padding, margin, alignment, absolute positioning, overflow, etc
 * Composable styling (colors, borders, border radius, opacity, shadows, and more)
 * Async task system (futures, background threads, delays, repeating intervals, exclusive tasks, and timeouts)
 * Builtin widget library
 * Font loading and management
 * Keyboard, mouse, and window event handling
+
+Bento is built on top:
+* **[winit](https://github.com/rust-windowing/winit)** for window handling
+* **[wgpu](https://github.com/gfx-rs/wgpu)** for 2D rendering
+* **[Glyphon](https://github.com/grovesNL/glyphon)** for text rendering
+* **[Taffy](https://github.com/DioxusLabs/taffy)** for layout
+* **[Tokio](https://github.com/tokio-rs/tokio)** for async task runtime
+
 
 ## Examples
 ```rust
