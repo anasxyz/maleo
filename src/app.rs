@@ -96,8 +96,7 @@ fn run<A: App>(settings: Settings) {
         .unwrap();
 }
 
-// gfx
-// all rendering resources, initialised on first resumed() call
+// Gfx — all rendering resources, initialized on first resumed() call
 
 struct Gfx {
     window: Arc<Window>,
@@ -149,8 +148,7 @@ impl Gfx {
     }
 }
 
-// modifiers
-// keyboard modifier key state
+// Modifiers — keyboard modifier key state
 
 #[derive(Default, Clone, Copy)]
 struct Modifiers {
@@ -159,8 +157,7 @@ struct Modifiers {
     alt: bool,
 }
 
-// tasks
-// async task stuff
+// Tasks — async task machinery
 
 struct Tasks<Action: Clone + Send + 'static> {
     tx: UnboundedSender<Action>,
@@ -225,9 +222,6 @@ struct Runner<A: App> {
     modifiers: Modifiers,
     focused_input_id: Option<String>,
     tasks: Tasks<A::Action>,
-    // used for double-click detection
-    start_time: std::time::Instant,
-    last_left_click_time: f64,
 }
 
 impl<A: App> Runner<A> {
@@ -256,12 +250,12 @@ impl<A: App> Runner<A> {
                 left_click_count: 0,
                 left_click_x: 0.0,
                 left_click_y: 0.0,
+                click_timer: std::time::Instant::now(),
+                last_click_time: -1.0,
             },
             modifiers: Modifiers::default(),
             focused_input_id: None,
             tasks: Tasks::new(tx, rx, proxy),
-            start_time: std::time::Instant::now(),
-            last_left_click_time: -1.0,
         }
     }
 
@@ -474,8 +468,8 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                             self.mouse.left_just_released = !pressed && self.mouse.left_pressed;
                             self.mouse.left_pressed = pressed;
                             if pressed {
-                                let now = self.start_time.elapsed().as_secs_f64();
-                                let dt = now - self.last_left_click_time;
+                                let now = self.mouse.click_timer.elapsed().as_secs_f64();
+                                let dt = now - self.mouse.last_click_time;
                                 let dx = self.mouse.x - self.mouse.left_click_x;
                                 let dy = self.mouse.y - self.mouse.left_click_y;
                                 let dist = (dx * dx + dy * dy).sqrt();
@@ -488,7 +482,7 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                                 }
                                 self.mouse.left_click_x = self.mouse.x;
                                 self.mouse.left_click_y = self.mouse.y;
-                                self.last_left_click_time = now;
+                                self.mouse.last_click_time = now;
                             }
                         }
                         MouseButton::Right => {

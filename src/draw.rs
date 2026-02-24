@@ -30,6 +30,9 @@ pub struct MouseState {
     pub left_click_count: u32, // 1 = single, 2 = double, 3 = triple
     pub left_click_x: f32,
     pub left_click_y: f32,
+    // click timing — used for double/triple click detection
+    pub(crate) click_timer: std::time::Instant,
+    pub(crate) last_click_time: f64,
 }
 
 // everything a widget needs to draw itself
