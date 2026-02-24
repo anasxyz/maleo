@@ -14,15 +14,16 @@
 * Font loading and management
 * Keyboard, mouse, and window event handling
 
-Bento is built on top:
-* **[winit](https://github.com/rust-windowing/winit)** for window handling
-* **[wgpu](https://github.com/gfx-rs/wgpu)** for 2D rendering
-* **[Glyphon](https://github.com/grovesNL/glyphon)** for text rendering
-* **[Taffy](https://github.com/DioxusLabs/taffy)** for layout
-* **[Tokio](https://github.com/tokio-rs/tokio)** for async task runtime
+Bento is built on top of:
+* **[`winit`](https://github.com/rust-windowing/winit)** for window handling
+* **[`wgpu`](https://github.com/gfx-rs/wgpu)** for 2D rendering
+* **[`Glyphon`](https://github.com/grovesNL/glyphon)** for text rendering
+* **[`Taffy`](https://github.com/DioxusLabs/taffy)** for layout
+* **[`Tokio`](https://github.com/tokio-rs/tokio)** for async task runtime
 
 
 ## Examples
+Simple text input:
 ```rust
         column(vec![
             text("Hello, Bento!", Color::hex("#ffffff"))
