@@ -98,7 +98,8 @@ impl App for MyApp {
             tab,
             // 1px line under tab
             rect(divider).width(percent(100.0)).height(px(1.0)),
-            text_editor("body")
+            text_editor()
+                .id("body")
                 .value(&self.notes)
                 .on_change(|v| Action::UpdateNotes(v))
                 .placeholder("// start typing...💁👌🎍😍 السَّلَامُ عَلَيْكُمْ")

@@ -12,6 +12,7 @@ use crate::{
 // Row
 
 pub struct Row<M: Clone + 'static> {
+    pub id: Option<String>,
     pub layout: Layout,
     pub style: Style,
     pub interactions: Interactions<M>,
@@ -23,6 +24,7 @@ pub struct Row<M: Clone + 'static> {
 impl<M: Clone + 'static> Row<M> {
     pub fn new(children: Vec<Element<M>>) -> Self {
         Self {
+            id: None,
             layout: Layout::default(),
             style: Style::default(),
             interactions: Interactions::default(),
@@ -30,6 +32,11 @@ impl<M: Clone + 'static> Row<M> {
             w: 0.0,
             h: 0.0,
         }
+    }
+
+    pub fn id(mut self, id: &str) -> Self {
+        self.id = Some(id.to_string());
+        self
     }
 
     pub fn draw(&mut self, ctx: &mut DrawCtx<M>) {
@@ -214,6 +221,7 @@ impl<M: Clone + 'static> Row<M> {
 // Column
 
 pub struct Column<M: Clone + 'static> {
+    pub id: Option<String>,
     pub layout: Layout,
     pub style: Style,
     pub interactions: Interactions<M>,
@@ -225,6 +233,7 @@ pub struct Column<M: Clone + 'static> {
 impl<M: Clone + 'static> Column<M> {
     pub fn new(children: Vec<Element<M>>) -> Self {
         Self {
+            id: None,
             layout: Layout::default(),
             style: Style::default(),
             interactions: Interactions::default(),
@@ -232,6 +241,11 @@ impl<M: Clone + 'static> Column<M> {
             w: 0.0,
             h: 0.0,
         }
+    }
+
+    pub fn id(mut self, id: &str) -> Self {
+        self.id = Some(id.to_string());
+        self
     }
 
     pub fn draw(&mut self, ctx: &mut DrawCtx<M>) {

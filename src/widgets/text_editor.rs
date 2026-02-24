@@ -11,10 +11,11 @@ use crate::{Align, Color, Edges, Fonts, Interactions, Layout, Margin, Style, Tex
 #[derive(Default)]
 pub struct TextEditorState {
     pub focused: bool,
-    pub cursor: usize,      // byte offset into the full string
-    pub scroll_offset: f32, // vertical scroll in logical pixels
+    pub cursor: usize,
+    pub scroll_offset: f32,
     pub selection_anchor: Option<usize>,
     pub dragging: bool,
+    pub cached_value: String,
 }
 
 pub(crate) struct TextEditorCallback<M>(pub Box<dyn Fn(String) -> M>);
@@ -22,7 +23,7 @@ pub(crate) struct TextEditorCallback<M>(pub Box<dyn Fn(String) -> M>);
 // ─── widget ───────────────────────────────────────────────────────────────────
 
 pub struct TextEditor<M: Clone + 'static> {
-    pub id: String,
+    pub id: Option<String>,
     pub placeholder: String,
     pub placeholder_color: Option<Color>,
     pub font: Option<String>,
@@ -40,9 +41,9 @@ pub struct TextEditor<M: Clone + 'static> {
 }
 
 impl<M: Clone + 'static> TextEditor<M> {
-    pub fn new(id: &str) -> Self {
+    pub fn new() -> Self {
         Self {
-            id: id.to_string(),
+            id: None,
             placeholder: String::new(),
             placeholder_color: None,
             font: None,
@@ -60,16 +61,35 @@ impl<M: Clone + 'static> TextEditor<M> {
         }
     }
 
+    pub fn id(mut self, id: &str) -> Self {
+        self.id = Some(id.to_string());
+        self
+    }
+
+    fn require_id(&self) -> &str {
+        self.id
+            .as_deref()
+            .expect("TextEditor requires an id — use .id(\"my_editor\")")
+    }
+
     pub fn draw(&mut self, ctx: &mut DrawCtx<M>) {
+        let id = self.require_id().to_string();
+        let id = id.as_str();
         let (x, y, w, h) = (self.x, self.y, self.w, self.h);
         if is_outside(x, y, w, h, ctx.clip) {
             return;
         }
 
         let value_str = self.value.as_deref().unwrap_or("");
-        cache_value(ctx.state, &self.id, value_str);
+
+        // cache the current value into state so app.rs can read it on key events
+        ctx.state
+            .get_or_default_mut::<TextEditorState>(id)
+            .cached_value = value_str.to_string();
+
+        // register callback for this frame
         if let Some(cb) = self.on_change.take() {
-            register_callback(ctx.state, &self.id, cb);
+            ctx.state.set_callback(id, TextEditorCallback(cb));
         }
 
         let hovered =
@@ -81,17 +101,16 @@ impl<M: Clone + 'static> TextEditor<M> {
 
         update_focus_and_drag(
             ctx.state,
-            &self.id,
+            id,
             hovered,
             ctx.mouse.left_just_pressed,
             ctx.mouse.left_pressed,
         );
-        let k = sk(&self.id);
-        let focused = ctx.state.get_or_default::<TextEditorState>(&k).focused;
+        let focused = ctx.state.get_or_default::<TextEditorState>(id).focused;
         // clamp cursor to valid byte boundary
-        ctx.state.get_or_default_mut::<TextEditorState>(&k).cursor = clamp_to_char_boundary(
+        ctx.state.get_or_default_mut::<TextEditorState>(id).cursor = clamp_to_char_boundary(
             value_str,
-            ctx.state.get_or_default::<TextEditorState>(&k).cursor,
+            ctx.state.get_or_default::<TextEditorState>(id).cursor,
         );
 
         let font_id = self
@@ -134,17 +153,17 @@ impl<M: Clone + 'static> TextEditor<M> {
         let lines: Vec<&str> = value_str.split('\n').collect();
 
         // update vertical scroll so cursor stays visible
-        update_scroll(ctx.state, &k, value_str, &lines, line_height, text_area_h);
+        update_scroll(ctx.state, id, value_str, &lines, line_height, text_area_h);
         let scroll = ctx
             .state
-            .get_or_default::<TextEditorState>(&k)
+            .get_or_default::<TextEditorState>(id)
             .scroll_offset;
         let scroll_snapped = (scroll * sc).floor() / sc;
 
         // handle mouse (may mutate cursor/selection)
         handle_mouse(
             ctx,
-            &k,
+            id,
             value_str,
             &lines,
             font_id,
@@ -157,10 +176,10 @@ impl<M: Clone + 'static> TextEditor<M> {
         );
 
         // re-read after mouse handling
-        let cursor_pos = ctx.state.get_or_default::<TextEditorState>(&k).cursor;
+        let cursor_pos = ctx.state.get_or_default::<TextEditorState>(id).cursor;
         let selection_anchor = ctx
             .state
-            .get_or_default::<TextEditorState>(&k)
+            .get_or_default::<TextEditorState>(id)
             .selection_anchor;
         let has_selection = selection_anchor.map_or(false, |a| a != cursor_pos);
 
@@ -377,14 +396,6 @@ impl<M: Clone + 'static> TextEditor<M> {
     }
 }
 
-// ─── state key namespacing ────────────────────────────────────────────────────
-// Prefix every StateStore key with "te::" so TextEditorState never collides
-// with TextInputState when both widgets share the same user-facing id string.
-
-fn sk(id: &str) -> String {
-    format!("te::{}", id)
-}
-
 // ─── draw helpers ─────────────────────────────────────────────────────────────
 
 fn update_focus_and_drag(
@@ -394,15 +405,14 @@ fn update_focus_and_drag(
     just_pressed: bool,
     pressed: bool,
 ) {
-    let k = sk(id);
     if just_pressed {
-        let s = state.get_or_default_mut::<TextEditorState>(&k);
+        let s = state.get_or_default_mut::<TextEditorState>(id);
         s.focused = hovered;
         s.selection_anchor = None;
         s.dragging = hovered;
     }
     if !pressed {
-        state.get_or_default_mut::<TextEditorState>(&k).dragging = false;
+        state.get_or_default_mut::<TextEditorState>(id).dragging = false;
     }
 }
 
@@ -902,55 +912,32 @@ fn selection_range(cursor: usize, anchor: Option<usize>) -> (usize, usize) {
 
 // ─── state helpers (called from app.rs) ───────────────────────────────────────
 
-pub(crate) fn register_callback<M: Clone + 'static>(
-    state: &mut StateStore,
-    id: &str,
-    callback: Box<dyn Fn(String) -> M>,
-) {
-    state.set_raw(id, TextEditorCallback(callback));
-}
-
 pub(crate) fn call_callback<M: Clone + 'static>(
     state: &StateStore,
     id: &str,
     value: String,
 ) -> Option<M> {
-    let cb = state.get_raw::<TextEditorCallback<M>>(id)?;
+    let cb = state.get_callback::<TextEditorCallback<M>>(id)?;
     Some((cb.0)(value))
 }
 
-pub(crate) fn cache_value(state: &mut StateStore, id: &str, value: &str) {
-    state.set_string(id, value);
-}
-
-pub(crate) fn get_cached_value(state: &StateStore, id: &str) -> String {
-    state.get_string(id)
-}
-
 pub(crate) fn find_focused(state: &StateStore) -> Option<String> {
-    // find_by_type returns the namespaced key "te::id" — strip the prefix
-    // so app.rs gets back the original user-facing id
-    let key = state.find_by_type::<TextEditorState, _>(|s| s.focused)?;
-    Some(key.strip_prefix("te::").unwrap_or(&key).to_string())
+    state.find::<TextEditorState, _>(|s| s.focused)
 }
 
-pub fn handle_key(
-    state: &mut StateStore,
-    id: &str,
-    current_value: &str,
-    event: &Event,
-    text: &str,
-) -> Option<String> {
-    let k = sk(id);
-    let focused = state.get_or_default::<TextEditorState>(&k).focused;
+pub fn handle_key(state: &mut StateStore, id: &str, event: &Event, text: &str) -> Option<String> {
+    let focused = state.get_or_default::<TextEditorState>(id).focused;
     if !focused {
         return None;
     }
 
-    let mut value = current_value.to_string();
+    let mut value = state
+        .get_or_default::<TextEditorState>(id)
+        .cached_value
+        .clone();
     let mut cursor =
-        clamp_to_char_boundary(&value, state.get_or_default::<TextEditorState>(&k).cursor);
-    let mut selection_anchor = state.get_or_default::<TextEditorState>(&k).selection_anchor;
+        clamp_to_char_boundary(&value, state.get_or_default::<TextEditorState>(id).cursor);
+    let mut selection_anchor = state.get_or_default::<TextEditorState>(id).selection_anchor;
     let mut changed = false;
     let has_selection = selection_anchor.map_or(false, |a| a != cursor);
 
@@ -1063,11 +1050,11 @@ pub fn handle_key(
         _ => {}
     }
 
-    let s = state.get_or_default_mut::<TextEditorState>(&k);
+    let s = state.get_or_default_mut::<TextEditorState>(id);
     s.cursor = cursor;
     s.selection_anchor = selection_anchor;
     if changed {
-        cache_value(state, id, &value);
+        s.cached_value = value.clone();
         Some(value)
     } else {
         None

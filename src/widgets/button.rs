@@ -5,6 +5,7 @@ use crate::layout::{align_to_self, margin_to_rect_lpa, val_to_dimension};
 use crate::{Align, Color, Edges, Fonts, Interactions, Layout, Margin, Style, TextAlign, Val};
 
 pub struct Button<M: Clone + 'static> {
+    pub id: Option<String>,
     pub label: String,
     pub layout: Layout,
     pub style: Style,
@@ -18,6 +19,7 @@ pub struct Button<M: Clone + 'static> {
 impl<M: Clone + 'static> Button<M> {
     pub fn new(label: &str) -> Self {
         Self {
+            id: None,
             label: label.to_string(),
             layout: Layout::default(),
             style: Style::default(),
@@ -27,6 +29,11 @@ impl<M: Clone + 'static> Button<M> {
             w: 0.0,
             h: 0.0,
         }
+    }
+
+    pub fn id(mut self, id: &str) -> Self {
+        self.id = Some(id.to_string());
+        self
     }
 
     pub fn draw(&mut self, ctx: &mut DrawCtx<M>) {
