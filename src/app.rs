@@ -96,7 +96,8 @@ fn run<A: App>(settings: Settings) {
         .unwrap();
 }
 
-// Gfx — all rendering resources, initialized on first resumed() call
+// gfx
+// all rendering resources, initialised on first resumed() call
 
 struct Gfx {
     window: Arc<Window>,
@@ -148,7 +149,8 @@ impl Gfx {
     }
 }
 
-// Modifiers — keyboard modifier key state
+// modifiers
+// keyboard modifier key state
 
 #[derive(Default, Clone, Copy)]
 struct Modifiers {
@@ -157,7 +159,8 @@ struct Modifiers {
     alt: bool,
 }
 
-// Tasks — async task machinery
+// tasks 
+// async task stuff
 
 struct Tasks<Action: Clone + Send + 'static> {
     tx: UnboundedSender<Action>,
@@ -211,6 +214,12 @@ impl<Action: Clone + Send + 'static> Tasks<Action> {
     }
 }
 
+// which text widget currently has keyboard focus
+enum FocusedWidget {
+    TextInput(String),
+    TextEditor(String),
+}
+
 // Runner
 
 struct Runner<A: App> {
@@ -220,7 +229,7 @@ struct Runner<A: App> {
     state: StateStore,
     mouse: MouseState,
     modifiers: Modifiers,
-    focused_input_id: Option<String>,
+    focused_widget: Option<FocusedWidget>,
     tasks: Tasks<A::Action>,
 }
 
@@ -254,7 +263,7 @@ impl<A: App> Runner<A> {
                 last_click_time: -1.0,
             },
             modifiers: Modifiers::default(),
-            focused_input_id: None,
+            focused_widget: None,
             tasks: Tasks::new(tx, rx, proxy),
         }
     }
@@ -366,8 +375,9 @@ impl<A: App> Runner<A> {
             self.gfx().window.request_redraw();
         }
 
-        self.focused_input_id =
-            ti::find_focused(&self.state).or_else(|| te::find_focused(&self.state));
+        self.focused_widget = ti::find_focused(&self.state)
+            .map(FocusedWidget::TextInput)
+            .or_else(|| te::find_focused(&self.state).map(FocusedWidget::TextEditor));
 
         // reset one-frame flags
         self.mouse.left_just_pressed = false;
@@ -541,57 +551,48 @@ impl<A: App> ApplicationHandler<Wake> for Runner<A> {
                         }
                     };
 
-                    let mut consumed = false;
-                    if let Some(id) = &self.focused_input_id.clone() {
-                        let text = if pressed && !ctrl {
-                            event.text.as_ref().map(|t| t.as_str()).unwrap_or("")
-                        } else {
-                            ""
-                        };
+                    // app gets first priority, if it handles the event, the widget doesnt see it
+                    let app_consumed = if let Some(action) = self.app.event(bento_event.clone()) {
+                        let tasks = self.app.update(action);
+                        self.tasks.spawn(tasks);
+                        self.gfx().window.request_redraw();
+                        true
+                    } else {
+                        false
+                    };
 
-                        if let Some(new_value) =
-                            ti::handle_key(&mut self.state, id, &bento_event, text)
-                        {
-                            consumed = true;
-                            if let Some(action) =
-                                ti::call_callback::<A::Action>(&self.state, id, new_value)
-                            {
-                                let tasks = self.app.update(action);
-                                self.tasks.spawn(tasks);
+                    // if app didnt consume it and a text widget is focused, route to the widget
+                    if !app_consumed {
+                        if let Some(focused) = &self.focused_widget {
+                            let text = if pressed && !ctrl {
+                                event.text.as_ref().map(|t| t.as_str()).unwrap_or("")
+                            } else {
+                                ""
+                            };
+
+                            let result = match focused {
+                                FocusedWidget::TextInput(id) => {
+                                    let id = id.clone();
+                                    ti::handle_key(&mut self.state, &id, &bento_event, text).map(
+                                        |v| ti::call_callback::<A::Action>(&self.state, &id, v),
+                                    )
+                                }
+                                FocusedWidget::TextEditor(id) => {
+                                    let id = id.clone();
+                                    te::handle_key(&mut self.state, &id, &bento_event, text).map(
+                                        |v| te::call_callback::<A::Action>(&self.state, &id, v),
+                                    )
+                                }
+                            };
+
+                            if let Some(maybe_action) = result {
+                                if let Some(action) = maybe_action {
+                                    let tasks = self.app.update(action);
+                                    self.tasks.spawn(tasks);
+                                }
+                                self.gfx().window.request_redraw();
                             }
-                            self.gfx().window.request_redraw();
-                        } else if let Some(new_value) =
-                            te::handle_key(&mut self.state, id, &bento_event, text)
-                        {
-                            consumed = true;
-                            if let Some(action) =
-                                te::call_callback::<A::Action>(&self.state, id, new_value)
-                            {
-                                let tasks = self.app.update(action);
-                                self.tasks.spawn(tasks);
-                            }
-                            self.gfx().window.request_redraw();
-                        } else if matches!(
-                            bento_event,
-                            Event::KeyPressed {
-                                key: Key::Left
-                                    | Key::Right
-                                    | Key::Up
-                                    | Key::Down
-                                    | Key::Home
-                                    | Key::End
-                                    | Key::Backspace
-                                    | Key::Delete,
-                                ..
-                            }
-                        ) {
-                            consumed = true;
-                            self.gfx().window.request_redraw();
                         }
-                    }
-
-                    if !consumed {
-                        self.dispatch_event(bento_event);
                     }
                 }
                 self.gfx().window.request_redraw();
