@@ -1,19 +1,58 @@
 use std::fmt::{Display, Formatter};
+use crate::color::Color;
 
 #[derive(Debug)]
 pub enum ElementType {
+    Container,
     Rect,
-    Row,
-    Col,
+}
+
+#[derive(Debug)]
+pub struct ElementStyle {
+    // positional / layout
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub min_w: f32,
+    pub min_h: f32,
+    pub max_w: f32,
+    pub max_h: f32,
+    pub padding: [f32; 4],
+    pub margin: [f32; 4],
+
+    // visual
+    pub fill: Color,
+    pub border_thickness: f32,
+    pub border_color: Option<Color>,
+    pub border_radius: Option<f32>,
+}
+
+impl Default for ElementStyle {
+    fn default() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            w: 100.0,
+            h: 100.0,
+            min_w: 0.0,
+            min_h: 0.0,
+            max_w: 0.0,
+            max_h: 0.0,
+            padding: [0.0; 4],
+            margin: [0.0; 4],
+            fill: Color::new(0.0, 0.0, 0.0, 1.0),
+            border_thickness: 0.0,
+            border_color: None,
+            border_radius: None,
+        }
+    }
 }
 
 pub struct Element {
     pub id: u32,
     pub _type: ElementType,
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
+    pub style: ElementStyle,
     pub children: Option<Vec<Element>>,
 }
 
@@ -23,39 +62,29 @@ impl Display for Element {
     }
 }
 
+impl Default for Element {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            _type: ElementType::Rect,
+            style: ElementStyle::default(),
+            children: None,
+        }
+    }
+}
+
 pub fn rect() -> Element {
     Element {
-        id: 0,
         _type: ElementType::Rect,
-        x: 0.0,
-        y: 0.0,
-        w: 100.0,
-        h: 100.0,
-        children: None,
+        ..Default::default()
     }
 }
 
-pub fn row(el: Vec<Element>) -> Element {
+pub fn container(el: Vec<Element>) -> Element {
     Element {
-        id: 0,
-        _type: ElementType::Row,
-        x: 0.0,
-        y: 0.0,
-        w: 100.0,
-        h: 100.0,
+        _type: ElementType::Container,
         children: Some(el),
-    }
-}
-
-pub fn col(el: Vec<Element>) -> Element {
-    Element {
-        id: 0,
-        _type: ElementType::Col,
-        x: 0.0,
-        y: 0.0,
-        w: 100.0,
-        h: 100.0,
-        children: Some(el),
+        ..Default::default()
     }
 }
 

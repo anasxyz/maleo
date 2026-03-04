@@ -8,8 +8,8 @@ impl App for MyApp {
     }
 
     fn view(&mut self) -> Element {
-        row(vec![
-            col(vec![rect()]),
+        container(vec![
+            container(vec![rect()]),
             rect(),
         ])
     }
