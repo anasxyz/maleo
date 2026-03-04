@@ -3,16 +3,22 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use winit::{
-    application::ApplicationHandler, event::{ElementState, WindowEvent}, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, keyboard::{KeyCode, PhysicalKey}, window::{Window, WindowId}
+    application::ApplicationHandler,
+    event::{ElementState, WindowEvent},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    keyboard::{KeyCode, PhysicalKey},
+    window::{Window, WindowId},
 };
 
-use crate::color::Color;
 use crate::render::gpu::GpuContext;
-use crate::window::WindowState;
 use crate::settings::WindowSettings;
+use crate::window::WindowState;
+use crate::{color::Color, element::Element};
+use crate::element::print_root;
 
 pub trait App: 'static + Sized {
     fn new() -> Self;
+    fn view(&mut self) -> Element;
     fn run(settings: WindowSettings) {
         run::<Self>(settings);
     }
@@ -73,7 +79,19 @@ impl<A: App> ApplicationHandler for Runner<A> {
         };
 
         match event {
-            WindowEvent::RedrawRequested => win.render(),
+            WindowEvent::RedrawRequested => {
+                let element = self.app.view();
+
+                // print whole element tree
+                print_root(&element);
+
+                win.begin();
+
+                // drawing happens here
+                // ...
+
+                win.render();
+            }
             WindowEvent::CloseRequested => {
                 self.windows.remove(&id);
                 if self.windows.is_empty() {

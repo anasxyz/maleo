@@ -29,9 +29,11 @@ impl WindowState {
         }
     }
 
-    pub fn render(&mut self) {
+    pub fn begin(&mut self) {
         self.draw.clear();
+    }
 
+    pub fn render(&mut self) {
         let frame = match self.gpu.begin_frame() {
             Ok(f) => f,
             Err(_) => return,
@@ -61,16 +63,6 @@ impl WindowState {
                 occlusion_query_set: None,
             });
 
-            self.draw.draw_rect(
-                100.0,
-                100.0,
-                200.0,
-                150.0,
-                RectParams {
-                    color: [1.0, 0.4, 0.1, 1.0],
-                    ..Default::default()
-                },
-            );
             self.draw
                 .render(&self.gpu.device, &self.gpu.queue, &mut pass);
         }
