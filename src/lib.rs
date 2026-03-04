@@ -10,6 +10,7 @@ mod render {
     pub mod shadow_renderer;
     pub mod shape_renderer;
     pub mod text_renderer;
+    pub mod draw;
 }
 
 mod window;

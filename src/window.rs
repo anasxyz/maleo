@@ -1,20 +1,36 @@
+use crate::color::Color;
+use crate::render::draw::DrawContext;
+use crate::render::gpu::GpuContext;
 use std::sync::Arc;
 use winit::window::Window;
-use crate::color::Color;
-use crate::render::gpu::GpuContext;
 
 pub struct WindowState {
     pub window: Arc<Window>,
     pub gpu: GpuContext,
     pub clear_color: Color,
+    pub draw: DrawContext,
 }
 
 impl WindowState {
     pub fn new(window: Arc<Window>, gpu: GpuContext, clear_color: Color) -> Self {
-        Self { window, gpu, clear_color }
+        let size = window.inner_size();
+        let draw = DrawContext::new(
+            &gpu.device,
+            gpu.format,
+            size.width as f32,
+            size.height as f32,
+        );
+        Self {
+            window,
+            gpu,
+            clear_color,
+            draw,
+        }
     }
 
     pub fn render(&mut self) {
+        self.draw.clear();
+
         let frame = match self.gpu.begin_frame() {
             Ok(f) => f,
             Err(_) => return,
@@ -24,7 +40,7 @@ impl WindowState {
 
         {
             let c = self.clear_color;
-            let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Clear Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -43,6 +59,9 @@ impl WindowState {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+
+            self.draw
+                .render(&self.gpu.device, &self.gpu.queue, &mut pass);
         }
 
         finisher.present(encoder, &self.gpu.queue);
