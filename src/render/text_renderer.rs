@@ -1,4 +1,4 @@
-use crate::{Color, TextAlign};
+use crate::{Color};
 use cosmic_text::Align as CosmicAlign;
 use glyphon::{
     Attrs, Buffer, Cache, Color as GlyphonColor, Family, FontSystem, Metrics, Resolution, Shaping,
@@ -19,7 +19,6 @@ struct TextEntry {
     size: f32,
     weight: u16,
     italic: bool,
-    text_align: TextAlign,
     color: GlyphonColor,
 }
 
@@ -80,7 +79,6 @@ impl TextRenderer {
         size: f32,
         weight: u16,
         italic: bool,
-        text_align: TextAlign,
         text: &str,
         x: f32,
         y: f32,
@@ -108,18 +106,6 @@ impl TextRenderer {
                 GlyphonStyle::Normal
             });
 
-        let cosmic_align = match text_align {
-            TextAlign::Left => Some(CosmicAlign::Left),
-            TextAlign::Center => Some(CosmicAlign::Center),
-            TextAlign::Right => Some(CosmicAlign::Right),
-        };
-
-        let apply_align = |buffer: &mut Buffer| {
-            for line in buffer.lines.iter_mut() {
-                line.set_align(cosmic_align);
-            }
-        };
-
         if idx < self.entries.len() {
             let entry = &mut self.entries[idx];
             entry.x = x;
@@ -133,7 +119,6 @@ impl TextRenderer {
                 || entry.size != size
                 || entry.weight != weight
                 || entry.italic != italic
-                || entry.text_align != text_align
                 || entry.width != width;
             if content_changed {
                 entry.text = text.to_string();
@@ -141,7 +126,6 @@ impl TextRenderer {
                 entry.size = size;
                 entry.weight = weight;
                 entry.italic = italic;
-                entry.text_align = text_align;
                 entry.width = width;
                 entry
                     .buffer
@@ -158,7 +142,6 @@ impl TextRenderer {
                 entry
                     .buffer
                     .set_text(font_system, text, &attrs, Shaping::Advanced);
-                apply_align(&mut entry.buffer);
                 entry.buffer.shape_until_scroll(font_system, false);
             }
         } else {
@@ -173,7 +156,6 @@ impl TextRenderer {
                 Some(self.screen_height - y),
             );
             buffer.set_text(font_system, text, &attrs, Shaping::Advanced);
-            apply_align(&mut buffer);
             buffer.shape_until_scroll(font_system, false);
             self.entries.push(TextEntry {
                 buffer,
@@ -187,7 +169,6 @@ impl TextRenderer {
                 size,
                 weight,
                 italic,
-                text_align,
                 color: glyphon_color,
             });
         }

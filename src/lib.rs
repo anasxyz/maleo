@@ -15,21 +15,11 @@ pub use render::shadow_renderer::ShadowRenderer;
 pub use render::shape_renderer::ShapeRenderer;
 pub use render::text_renderer::TextRenderer;
 
+mod window;
+mod settings;
 mod app;
 mod color;
-mod draw;
-mod element;
-mod events;
-mod fonts;
-mod layout;
-mod state;
-mod task;
-pub(crate) mod widgets;
 
-pub use app::{App, Settings};
+pub use settings::Settings;
+pub use app::App;
 pub use color::Color;
-pub use draw::Cursor;
-pub use element::*;
-pub use events::{Event, Key, MouseButton, key_code_to_key};
-pub use fonts::{FontBuilder, FontId, Fonts};
-pub use task::Task;
