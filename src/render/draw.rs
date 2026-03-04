@@ -1,4 +1,4 @@
-use crate::render::shape_renderer::ShapeRenderer;
+use crate::render::shape_renderer::{RectParams, ShapeRenderer};
 use wgpu;
 
 pub struct DrawContext {
@@ -21,8 +21,8 @@ impl DrawContext {
         self.shapes.resize(width, height);
     }
 
-    pub fn draw_rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: [f32; 4]) {
-        self.shapes.draw_rect(x, y, w, h, color, [0.0; 4], 0.0);
+    pub fn draw_rect(&mut self, x: f32, y: f32, w: f32, h: f32, p: RectParams) {
+        self.shapes.draw_rect(x, y, w, h, p);
     }
 
     pub fn render<'pass>(

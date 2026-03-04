@@ -45,6 +45,26 @@ const INSTANCE_ATTRS: &[wgpu::VertexAttribute] = &[
     },
 ];
 
+pub struct RectParams {
+    pub color: [f32; 4],
+    pub radius: f32,
+    pub border_color: [f32; 4],
+    pub border_width: f32,
+    pub clip: Option<[f32; 4]>,
+}
+
+impl Default for RectParams {
+    fn default() -> Self {
+        Self {
+            color: [1.0; 4],
+            radius: 0.0,
+            border_color: [0.0; 4],
+            border_width: 0.0,
+            clip: None,
+        }
+    }
+}
+
 pub struct ShapeRenderer {
     pipeline: wgpu::RenderPipeline,
     instance_buffer: wgpu::Buffer,
@@ -121,156 +141,39 @@ impl ShapeRenderer {
         }
     }
 
-    // ── public API (names unchanged) ──────────────────────────────────────
-
-    #[inline(always)]
     pub fn clear(&mut self) {
         self.instances.clear();
     }
 
-    /// Axis-aligned rectangle with optional border. No rounding.
-    #[inline]
-    pub fn draw_rect(
-        &mut self,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        color: [f32; 4],
-        outline_color: [f32; 4],
-        outline_thickness: f32,
-    ) {
-        self.push(
-            x,
-            y,
-            w,
-            h,
-            0.0,
-            outline_thickness,
-            color,
-            outline_color,
-            [0.0; 4],
-        );
+    pub fn resize(&mut self, width: f32, height: f32) {
+        self.screen_width = width;
+        self.screen_height = height;
     }
 
-    /// rectangle clipped to [cx, cy, cx2, cy2]
-    #[inline]
-    pub fn draw_rect_clipped(
-        &mut self,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        color: [f32; 4],
-        clip: [f32; 4],
-    ) {
-        self.push_clipped(x, y, w, h, 0.0, 0.0, color, [0.0; 4], clip);
-    }
+    pub fn draw_rect(&mut self, x: f32, y: f32, w: f32, h: f32, p: RectParams) {
+        let color = p.color;
+        let radius = p.radius;
+        let border_color = p.border_color;
+        let border_width = p.border_width;
+        let clip = p.clip;
+        let radius = radius.min(w * 0.5).min(h * 0.5);
+        let clip_arr = clip.unwrap_or([0.0; 4]);
 
-    /// rounded rectangle with optional border
-    #[inline]
-    pub fn draw_rounded_rect(
-        &mut self,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        radius: f32,
-        color: [f32; 4],
-        outline_color: [f32; 4],
-        outline_thickness: f32,
-    ) {
-        let r = radius.min(w * 0.5).min(h * 0.5);
-        self.push(
-            x,
-            y,
-            w,
-            h,
-            r,
-            outline_thickness,
-            color,
-            outline_color,
-            [0.0; 4],
-        );
-    }
-
-    /// circle. radius is the outer radius; the circle is centered at (cx, cy)
-    #[inline]
-    pub fn draw_circle(
-        &mut self,
-        cx: f32,
-        cy: f32,
-        radius: f32,
-        color: [f32; 4],
-        outline_color: [f32; 4],
-        outline_thickness: f32,
-    ) {
-        let d = radius * 2.0;
-        self.push(
-            cx - radius,
-            cy - radius,
-            d,
-            d,
-            radius,
-            outline_thickness,
-            color,
-            outline_color,
-            [0.0; 4],
-        );
-    }
-
-    #[inline(always)]
-    fn push(
-        &mut self,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        radius: f32,
-        border_w: f32,
-        fill: [f32; 4],
-        border: [f32; 4],
-        clip: [f32; 4],
-    ) {
-        self.instances.push(Instance {
-            pos_size: [x, y, w, h],
-            params: [radius, border_w, 1.0, 0.0],
-            fill_color: fill,
-            border_color: border,
-            clip,
-            screen_size: [self.screen_width, self.screen_height, 0.0, 0.0],
-        });
-    }
-
-    #[inline(always)]
-    fn push_clipped(
-        &mut self,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        radius: f32,
-        border_w: f32,
-        fill: [f32; 4],
-        border: [f32; 4],
-        clip: [f32; 4],
-    ) {
-        // early out if rect is fully outside clip
-        let [cx, cy, cx2, cy2] = clip;
-        if x + w <= cx || y + h <= cy || x >= cx2 || y >= cy2 {
-            return;
+        if let Some([cx, cy, cx2, cy2]) = clip {
+            if x + w <= cx || y + h <= cy || x >= cx2 || y >= cy2 {
+                return;
+            }
         }
+
         self.instances.push(Instance {
             pos_size: [x, y, w, h],
-            params: [radius, border_w, 1.0, 0.0],
-            fill_color: fill,
-            border_color: border,
-            clip,
+            params: [radius, border_width, 1.0, 0.0],
+            fill_color: color,
+            border_color,
+            clip: clip_arr,
             screen_size: [self.screen_width, self.screen_height, 0.0, 0.0],
         });
     }
-
-    // render
 
     pub fn render<'pass>(
         &'pass mut self,
@@ -298,10 +201,5 @@ impl ShapeRenderer {
         pass.set_pipeline(&self.pipeline);
         pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
         pass.draw(0..6, 0..self.instances.len() as u32);
-    }
-
-    pub fn resize(&mut self, width: f32, height: f32) {
-        self.screen_width = width;
-        self.screen_height = height;
     }
 }

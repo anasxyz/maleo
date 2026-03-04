@@ -1,11 +1,34 @@
 use crate::color::Color;
-use cosmic_text::Align as CosmicAlign;
 use glyphon::{
     Attrs, Buffer, Cache, Color as GlyphonColor, Family, FontSystem, Metrics, Resolution, Shaping,
     Style as GlyphonStyle, SwashCache, TextArea, TextAtlas, TextBounds,
-    TextRenderer as GlyphonRenderer, Viewport, Weight, cosmic_text,
+    TextRenderer as GlyphonRenderer, Viewport, Weight,
 };
 use wgpu;
+
+pub struct TextParams<'a> {
+    pub family: &'a str,
+    pub size: f32,
+    pub weight: u16,
+    pub italic: bool,
+    pub color: Color,
+    pub width: f32,
+    pub clip: Option<[f32; 4]>,
+}
+
+impl<'a> Default for TextParams<'a> {
+    fn default() -> Self {
+        Self {
+            family: "sans-serif",
+            size: 16.0,
+            weight: 400,
+            italic: false,
+            color: Color::WHITE,
+            width: f32::MAX,
+            clip: None,
+        }
+    }
+}
 
 struct TextEntry {
     buffer: Buffer,
@@ -75,21 +98,21 @@ impl TextRenderer {
     pub fn draw(
         &mut self,
         font_system: &mut FontSystem,
-        family: String,
-        size: f32,
-        weight: u16,
-        italic: bool,
         text: &str,
         x: f32,
         y: f32,
-        width: f32,
-        clip: Option<[f32; 4]>,
-        color: Color,
+        p: TextParams,
     ) {
+        let family = p.family.to_string();
+        let size = p.size;
+        let weight = p.weight;
+        let italic = p.italic;
+        let width = p.width;
+        let clip = p.clip;
         let glyphon_color = GlyphonColor::rgb(
-            (color.r * 255.0) as u8,
-            (color.g * 255.0) as u8,
-            (color.b * 255.0) as u8,
+            (p.color.r * 255.0) as u8,
+            (p.color.g * 255.0) as u8,
+            (p.color.b * 255.0) as u8,
         );
 
         let scale = self.scale_factor as f32;

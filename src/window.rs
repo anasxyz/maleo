@@ -1,6 +1,7 @@
 use crate::color::Color;
 use crate::render::draw::DrawContext;
 use crate::render::gpu::GpuContext;
+use crate::render::shape_renderer::RectParams;
 use std::sync::Arc;
 use winit::window::Window;
 
@@ -60,6 +61,16 @@ impl WindowState {
                 occlusion_query_set: None,
             });
 
+            self.draw.draw_rect(
+                100.0,
+                100.0,
+                200.0,
+                150.0,
+                RectParams {
+                    color: [1.0, 0.4, 0.1, 1.0],
+                    ..Default::default()
+                },
+            );
             self.draw
                 .render(&self.gpu.device, &self.gpu.queue, &mut pass);
         }
