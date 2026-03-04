@@ -1,4 +1,4 @@
-use crate::{Color};
+use crate::color::Color;
 use cosmic_text::Align as CosmicAlign;
 use glyphon::{
     Attrs, Buffer, Cache, Color as GlyphonColor, Family, FontSystem, Metrics, Resolution, Shaping,

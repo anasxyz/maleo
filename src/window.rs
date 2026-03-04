@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use winit::window::Window;
-use crate::{Color, GpuContext};
+use crate::color::Color;
+use crate::render::gpu::GpuContext;
 
 pub struct WindowState {
     pub window: Arc<Window>,

@@ -1,4 +1,4 @@
-use bento::*;
+use bento::prelude::*;
 
 struct MyApp;
 
@@ -9,5 +9,5 @@ impl App for MyApp {
 }
 
 fn main() {
-    MyApp::run(Settings::default());
+    MyApp::run(WindowSettings::default());
 }

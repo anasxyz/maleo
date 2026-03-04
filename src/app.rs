@@ -6,19 +6,19 @@ use winit::{
     application::ApplicationHandler, event::{ElementState, WindowEvent}, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, keyboard::{KeyCode, PhysicalKey}, window::{Window, WindowId}
 };
 
-use crate::Color;
-use crate::GpuContext;
+use crate::color::Color;
+use crate::render::gpu::GpuContext;
 use crate::window::WindowState;
-use crate::settings::Settings;
+use crate::settings::WindowSettings;
 
 pub trait App: 'static + Sized {
     fn new() -> Self;
-    fn run(settings: Settings) {
+    fn run(settings: WindowSettings) {
         run::<Self>(settings);
     }
 }
 
-fn run<A: App>(settings: Settings) {
+fn run<A: App>(settings: WindowSettings) {
     let event_loop = EventLoop::new().unwrap();
     event_loop
         .run_app(&mut Runner::new(A::new(), settings))
@@ -28,11 +28,11 @@ fn run<A: App>(settings: Settings) {
 struct Runner<A: App> {
     app: A,
     windows: HashMap<WindowId, WindowState>,
-    init: Settings,
+    init: WindowSettings,
 }
 
 impl<A: App> Runner<A> {
-    fn new(app: A, settings: Settings) -> Self {
+    fn new(app: A, settings: WindowSettings) -> Self {
         Self {
             app,
             windows: HashMap::new(),
@@ -40,7 +40,7 @@ impl<A: App> Runner<A> {
         }
     }
 
-    fn open_window(&mut self, event_loop: &ActiveEventLoop, settings: &Settings) {
+    fn open_window(&mut self, event_loop: &ActiveEventLoop, settings: &WindowSettings) {
         let window = Arc::new(
             event_loop
                 .create_window(
@@ -83,7 +83,7 @@ impl<A: App> ApplicationHandler for Runner<A> {
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.state == ElementState::Pressed {
                     if let PhysicalKey::Code(KeyCode::KeyL) = event.physical_key {
-                        let new_settings = Settings {
+                        let new_settings = WindowSettings {
                             title: "demo".to_string(),
                             width: 640,
                             height: 480,

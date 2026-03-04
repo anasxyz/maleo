@@ -3,6 +3,8 @@
 #![allow(unused_imports)]
 #![allow(unused_mut)]
 
+pub mod prelude;
+
 mod render {
     pub mod gpu;
     pub mod shadow_renderer;
@@ -10,16 +12,7 @@ mod render {
     pub mod text_renderer;
 }
 
-pub use render::gpu::{FrameFinisher, GpuContext, RenderFrame};
-pub use render::shadow_renderer::ShadowRenderer;
-pub use render::shape_renderer::ShapeRenderer;
-pub use render::text_renderer::TextRenderer;
-
 mod window;
 mod settings;
 mod app;
 mod color;
-
-pub use settings::Settings;
-pub use app::App;
-pub use color::Color;
