@@ -10,11 +10,11 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::render::gpu::GpuContext;
+use crate::element::{ElementType, print_root};
+use crate::render::{gpu::GpuContext, shape_renderer::RectParams};
 use crate::settings::WindowSettings;
 use crate::window::WindowState;
 use crate::{color::Color, element::Element};
-use crate::element::print_root;
 
 pub trait App: 'static + Sized {
     fn new() -> Self;
@@ -66,6 +66,32 @@ impl<A: App> Runner<A> {
     }
 }
 
+fn draw_tree(el: &Element, draw: &mut crate::render::draw::DrawContext) {
+    match el._type {
+        ElementType::Rect => {
+            draw.draw_rect(
+                el.style.x,
+                el.style.y,
+                el.style.w,
+                el.style.h,
+                RectParams {
+                    color: el.style.fill.to_array(),
+                    radius: 4.0,
+                    border_color: el.style.border_color.unwrap_or(Color::BLACK).to_array(),
+                    border_width: el.style.border_thickness,
+                    clip: None,
+                },
+            );
+        }
+        _ => {}
+    }
+    if let Some(children) = &el.children {
+        for child in children {
+            draw_tree(child, draw);
+        }
+    }
+}
+
 impl<A: App> ApplicationHandler for Runner<A> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let settings = self.init.clone();
@@ -89,6 +115,8 @@ impl<A: App> ApplicationHandler for Runner<A> {
 
                 // drawing happens here
                 // ...
+                println!("drawing tree");
+                draw_tree(&element, &mut win.draw);
 
                 win.render();
             }

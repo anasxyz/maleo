@@ -3,8 +3,6 @@
 #![allow(unused_imports)]
 #![allow(unused_mut)]
 
-pub mod prelude;
-
 mod render {
     pub mod gpu;
     pub mod shadow_renderer;
@@ -18,3 +16,10 @@ mod settings;
 mod app;
 mod color;
 mod element;
+
+pub use crate::{
+    app::App,
+    color::Color,
+    settings::WindowSettings,
+    element::*,
+};

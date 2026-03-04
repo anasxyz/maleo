@@ -1,4 +1,4 @@
-use bento::prelude::*;
+use bento::*;
 
 struct MyApp;
 
@@ -9,8 +9,10 @@ impl App for MyApp {
 
     fn view(&mut self) -> Element {
         container(vec![
-            container(vec![rect()]),
-            rect(),
+            rect()
+                .w(100.0)
+                .h(200.0)
+                .fill(Color::rgb(110, 110, 10)),
         ])
     }
 }

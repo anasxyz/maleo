@@ -73,6 +73,33 @@ impl Default for Element {
     }
 }
 
+impl Element {
+    pub fn w(mut self, w: f32) -> Self {
+        self.style.w = w;
+        self
+    }
+
+    pub fn h(mut self, h: f32) -> Self {
+        self.style.h = h;
+        self
+    }
+
+    pub fn x(mut self, x: f32) -> Self {
+        self.style.x = x;
+        self
+    }
+
+    pub fn y(mut self, y: f32) -> Self {
+        self.style.y = y;
+        self
+    }
+
+    pub fn fill(mut self, color: Color) -> Self {
+        self.style.fill = color;
+        self
+    }
+}
+
 pub fn rect() -> Element {
     Element {
         _type: ElementType::Rect,
