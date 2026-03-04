@@ -17,8 +17,8 @@ impl DrawContext {
         }
     }
 
-    pub fn resize(&mut self, width: f32, height: f32) {
-        self.shapes.resize(width, height);
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.shapes.resize(width as f32, height as f32);
     }
 
     pub fn draw_rect(&mut self, x: f32, y: f32, w: f32, h: f32, p: RectParams) {

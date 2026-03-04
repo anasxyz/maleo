@@ -92,6 +92,17 @@ fn draw_tree(el: &Element, draw: &mut crate::render::draw::DrawContext) {
     }
 }
 
+fn layout_tree(el: &mut Element) {
+    if let Some(children) = &mut el.children {
+        let mut cursor_x = el.style.x;
+        for child in children {
+            child.style.x = cursor_x;
+            child.style.y = el.style.y;
+            cursor_x += child.style.w;
+        }
+    }
+}
+
 impl<A: App> ApplicationHandler for Runner<A> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let settings = self.init.clone();
@@ -106,7 +117,7 @@ impl<A: App> ApplicationHandler for Runner<A> {
 
         match event {
             WindowEvent::RedrawRequested => {
-                let element = self.app.view();
+                let mut element = self.app.view();
 
                 // print whole element tree
                 print_root(&element);
@@ -116,9 +127,14 @@ impl<A: App> ApplicationHandler for Runner<A> {
                 // drawing happens here
                 // ...
                 println!("drawing tree");
+                layout_tree(&mut element);
                 draw_tree(&element, &mut win.draw);
 
                 win.render();
+            }
+            WindowEvent::Resized(size) => {
+                win.gpu.resize(size.width, size.height);
+                win.draw.resize(size.width, size.height);
             }
             WindowEvent::CloseRequested => {
                 self.windows.remove(&id);

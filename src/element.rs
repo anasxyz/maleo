@@ -9,7 +9,7 @@ pub enum ElementType {
 
 #[derive(Debug)]
 pub struct ElementStyle {
-    // positional / layout
+    // positional
     pub x: f32,
     pub y: f32,
     pub w: f32,
@@ -26,11 +26,15 @@ pub struct ElementStyle {
     pub border_thickness: f32,
     pub border_color: Option<Color>,
     pub border_radius: Option<f32>,
+
+    // layout
+    direction: String,
 }
 
 impl Default for ElementStyle {
     fn default() -> Self {
         Self {
+            // positional
             x: 0.0,
             y: 0.0,
             w: 100.0,
@@ -41,10 +45,15 @@ impl Default for ElementStyle {
             max_h: 0.0,
             padding: [0.0; 4],
             margin: [0.0; 4],
+
+            // visual
             fill: Color::new(0.0, 0.0, 0.0, 1.0),
             border_thickness: 0.0,
             border_color: None,
             border_radius: None,
+
+            // layout
+            direction: String::from("row"),
         }
     }
 }
@@ -96,6 +105,11 @@ impl Element {
 
     pub fn fill(mut self, color: Color) -> Self {
         self.style.fill = color;
+        self
+    }
+
+    pub fn direction(mut self, direction: String) -> Self {
+        self.style.direction = direction;
         self
     }
 }
