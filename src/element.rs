@@ -1,5 +1,5 @@
-use std::fmt::{Display, Formatter};
 use crate::color::Color;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
 pub enum ElementType {
@@ -103,6 +103,50 @@ impl Element {
 
     pub fn gap(mut self, gap: f32) -> Self {
         self.style.gap = gap;
+        self
+    }
+
+    // padding
+    pub fn p(mut self, padding: [f32; 4]) -> Self {
+        self.style.padding = padding;
+        self
+    }
+    pub fn pt(mut self, padding_top: f32) -> Self {
+        self.style.padding[0] = padding_top;
+        self
+    }
+    pub fn pr(mut self, padding_right: f32) -> Self {
+        self.style.padding[1] = padding_right;
+        self
+    }
+    pub fn pb(mut self, padding_bottom: f32) -> Self {
+        self.style.padding[2] = padding_bottom;
+        self
+    }
+    pub fn pl(mut self, padding_left: f32) -> Self {
+        self.style.padding[3] = padding_left;
+        self
+    }
+
+    // margin
+    pub fn m(mut self, margin: [f32; 4]) -> Self {
+        self.style.margin = margin;
+        self
+    }
+    pub fn mt(mut self, margin_top: f32) -> Self {
+        self.style.margin[0] = margin_top;
+        self
+    }
+    pub fn mr(mut self, margin_right: f32) -> Self {
+        self.style.margin[1] = margin_right;
+        self
+    }
+    pub fn mb(mut self, margin_bottom: f32) -> Self {
+        self.style.margin[2] = margin_bottom;
+        self
+    }
+    pub fn ml(mut self, margin_left: f32) -> Self {
+        self.style.margin[3] = margin_left;
         self
     }
 

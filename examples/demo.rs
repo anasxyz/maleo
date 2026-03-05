@@ -15,10 +15,10 @@ impl App for MyApp {
                 rect().w(100.0).h(200.0).fill(Color::rgb(110, 10, 120)),
             ]),
             row(vec![
-                rect().w(100.0).h(200.0).fill(Color::rgb(10, 110, 10)),
+                rect().w(100.0).h(200.0).fill(Color::rgb(10, 110, 10)).mt(10.0),
                 rect().w(100.0).h(200.0).fill(Color::rgb(10, 10, 110)),
             ]),
-        ]).gap(10.0)
+        ]).m([10.0, 10.0, 10.0, 10.0])
     }
 }
 
