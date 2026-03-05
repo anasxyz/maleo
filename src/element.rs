@@ -85,24 +85,32 @@ impl Element {
         self.style.w = w;
         self
     }
-
     pub fn h(mut self, h: f32) -> Self {
         self.style.h = h;
         self
     }
-
     pub fn x(mut self, x: f32) -> Self {
         self.style.x = x;
         self
     }
-
     pub fn y(mut self, y: f32) -> Self {
         self.style.y = y;
         self
     }
-
-    pub fn gap(mut self, gap: f32) -> Self {
-        self.style.gap = gap;
+    pub fn max_w(mut self, max_w: f32) -> Self {
+        self.style.max_w = max_w;
+        self
+    }
+    pub fn max_h(mut self, max_h: f32) -> Self {
+        self.style.max_h = max_h;
+        self
+    }
+    pub fn min_w(mut self, min_w: f32) -> Self {
+        self.style.min_w = min_w;
+        self
+    }
+    pub fn min_h(mut self, min_h: f32) -> Self {
+        self.style.min_h = min_h;
         self
     }
 
@@ -147,6 +155,11 @@ impl Element {
     }
     pub fn ml(mut self, margin_left: f32) -> Self {
         self.style.margin[3] = margin_left;
+        self
+    }
+
+    pub fn gap(mut self, gap: f32) -> Self {
+        self.style.gap = gap;
         self
     }
 
