@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 pub const AUTO: f32 = f32::NAN;
 
-// enums 
+// enums
 
 #[derive(Debug, Clone)]
 pub enum Size {
@@ -47,6 +47,7 @@ impl Default for Position {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Overflow {
     Visible,
     Hidden,
@@ -119,7 +120,21 @@ impl Default for FlexWrap {
     }
 }
 
-// element style 
+#[derive(Debug, Clone, PartialEq)]
+pub enum FlexDirection {
+    Row,
+    Col,
+    RowReverse,
+    ColReverse,
+}
+
+impl Default for FlexDirection {
+    fn default() -> Self {
+        FlexDirection::Row
+    }
+}
+
+// element style
 
 #[derive(Debug, Clone)]
 pub struct ElementStyle {
@@ -136,16 +151,18 @@ pub struct ElementStyle {
     pub min_h: Size,
     pub max_w: Size,
     pub max_h: Size,
+    pub aspect_ratio: Option<f32>,
 
     // spacing
-    pub padding: [f32; 4],   // [top, right, bottom, left]
-    pub margin: [f32; 4],    // [top, right, bottom, left]
+    pub padding: [f32; 4],  // [top, right, bottom, left]
+    pub margin: [f32; 4],   // [top, right, bottom, left]
 
     // gap
     pub row_gap: f32,
     pub col_gap: f32,
 
     // flex container
+    pub flex_direction: FlexDirection,
     pub align_items: AlignItems,
     pub justify_content: JustifyContent,
     pub flex_wrap: FlexWrap,
@@ -155,18 +172,23 @@ pub struct ElementStyle {
     pub flex_shrink: f32,
     pub flex_basis: Size,
     pub align_self: AlignSelf,
+
+    // overflow
     pub overflow_x: Overflow,
     pub overflow_y: Overflow,
 
     // position
     pub position: Position,
-    pub inset: [Size; 4],    // [top, right, bottom, left]
+    pub inset: [Size; 4],   // [top, right, bottom, left]
 
     // visual
     pub fill: Color,
     pub border_thickness: f32,
     pub border_color: Option<Color>,
     pub border_radius: Option<f32>,
+    pub opacity: f32,
+    pub z_index: i32,
+    pub visible: bool,
 }
 
 impl Default for ElementStyle {
@@ -182,10 +204,12 @@ impl Default for ElementStyle {
             min_h: Size::Fixed(0.0),
             max_w: Size::Auto,
             max_h: Size::Auto,
+            aspect_ratio: None,
             padding: [0.0; 4],
             margin: [0.0; 4],
             row_gap: 0.0,
             col_gap: 0.0,
+            flex_direction: FlexDirection::Row,
             align_items: AlignItems::Stretch,
             justify_content: JustifyContent::Start,
             flex_wrap: FlexWrap::NoWrap,
@@ -201,11 +225,14 @@ impl Default for ElementStyle {
             border_thickness: 0.0,
             border_color: None,
             border_radius: None,
+            opacity: 1.0,
+            z_index: 0,
+            visible: true,
         }
     }
 }
 
-// element 
+// element
 
 pub struct Element {
     pub id: u32,
@@ -239,6 +266,7 @@ impl Element {
     pub fn min_h(mut self, v: Size) -> Self { self.style.min_h = v; self }
     pub fn max_w(mut self, v: Size) -> Self { self.style.max_w = v; self }
     pub fn max_h(mut self, v: Size) -> Self { self.style.max_h = v; self }
+    pub fn aspect_ratio(mut self, v: f32) -> Self { self.style.aspect_ratio = Some(v); self }
 
     // padding
     pub fn p(mut self, v: [f32; 4]) -> Self { self.style.padding = v; self }
@@ -264,6 +292,7 @@ impl Element {
     pub fn col_gap(mut self, v: f32) -> Self { self.style.col_gap = v; self }
 
     // flex container
+    pub fn flex_direction(mut self, v: FlexDirection) -> Self { self.style.flex_direction = v; self }
     pub fn align_items(mut self, v: AlignItems) -> Self { self.style.align_items = v; self }
     pub fn justify_content(mut self, v: JustifyContent) -> Self { self.style.justify_content = v; self }
     pub fn flex_wrap(mut self, v: FlexWrap) -> Self { self.style.flex_wrap = v; self }
@@ -273,7 +302,9 @@ impl Element {
     pub fn shrink(mut self, v: f32) -> Self { self.style.flex_shrink = v; self }
     pub fn basis(mut self, v: Size) -> Self { self.style.flex_basis = v; self }
     pub fn align_self(mut self, v: AlignSelf) -> Self { self.style.align_self = v; self }
-    pub fn overflow(mut self, v: Overflow) -> Self { self.style.overflow_x = v; self.style.overflow_y = v; self }
+
+    // overflow
+    pub fn overflow(mut self, v: Overflow) -> Self { self.style.overflow_x = v.clone(); self.style.overflow_y = v; self }
     pub fn overflow_x(mut self, v: Overflow) -> Self { self.style.overflow_x = v; self }
     pub fn overflow_y(mut self, v: Overflow) -> Self { self.style.overflow_y = v; self }
 
@@ -290,9 +321,13 @@ impl Element {
     pub fn border(mut self, thickness: f32) -> Self { self.style.border_thickness = thickness; self }
     pub fn border_color(mut self, color: Color) -> Self { self.style.border_color = Some(color); self }
     pub fn border_radius(mut self, radius: f32) -> Self { self.style.border_radius = Some(radius); self }
+    pub fn opacity(mut self, v: f32) -> Self { self.style.opacity = v; self }
+    pub fn z_index(mut self, v: i32) -> Self { self.style.z_index = v; self }
+    pub fn hide(mut self) -> Self { self.style.visible = false; self }
+    pub fn show(mut self) -> Self { self.style.visible = true; self }
 }
 
-// constructors 
+// constructors
 
 pub fn rect() -> Element {
     Element { _type: ElementType::Rect, ..Default::default() }
