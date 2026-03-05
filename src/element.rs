@@ -1,6 +1,8 @@
 use crate::color::Color;
 use std::fmt::{Display, Formatter};
 
+pub const AUTO: f32 = f32::NAN;
+
 #[derive(Debug)]
 pub enum ElementType {
     Row,

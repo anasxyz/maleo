@@ -18,19 +18,17 @@ impl App for MyApp {
                 rect()
                     .w(100.0)
                     .h(200.0)
-                    .bg(rgb(10, 110, 10))
-                    .mt(10.0),
+                    .bg(rgb(10, 110, 10)),
                 rect()
                     .w(100.0)
                     .h(100.0)
                     .bg(rgb(10, 10, 110))
                     .border(3.0)
                     .border_radius(10.0)
-                    .border_color(rgb(0, 0, 0)),
+                    .border_color(rgb(0, 0, 0))
             ]),
         ])
         .m([10.0, 10.0, 10.0, 10.0])
-        .max_w(110.0)
     }
 }
 
