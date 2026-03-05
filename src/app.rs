@@ -99,6 +99,7 @@ fn layout_tree(el: &mut Element) {
             child.style.x = cursor_x;
             child.style.y = el.style.y;
             cursor_x += child.style.w;
+            layout_tree(child);
         }
     }
 }
@@ -135,6 +136,9 @@ impl<A: App> ApplicationHandler for Runner<A> {
             WindowEvent::Resized(size) => {
                 win.gpu.resize(size.width, size.height);
                 win.draw.resize(size.width, size.height);
+            }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                win.draw.set_scale(scale_factor as f32);
             }
             WindowEvent::CloseRequested => {
                 self.windows.remove(&id);

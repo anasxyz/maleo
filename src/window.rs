@@ -15,11 +15,13 @@ pub struct WindowState {
 impl WindowState {
     pub fn new(window: Arc<Window>, gpu: GpuContext, clear_color: Color) -> Self {
         let size = window.inner_size();
+        let scale = window.scale_factor();
         let draw = DrawContext::new(
             &gpu.device,
             gpu.format,
             size.width as f32,
             size.height as f32,
+            scale as f32,
         );
         Self {
             window,
