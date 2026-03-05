@@ -150,10 +150,25 @@ impl Element {
         self
     }
 
-    pub fn fill(mut self, color: Color) -> Self {
+    pub fn bg(mut self, color: Color) -> Self {
         self.style.fill = color;
         self
     }
+
+    // border
+    pub fn border(mut self, thickness: f32) -> Self {
+        self.style.border_thickness = thickness;
+        self
+    }
+    pub fn border_color(mut self, color: Color) -> Self {
+        self.style.border_color = Some(color);
+        self
+    }
+    pub fn border_radius(mut self, radius: f32) -> Self {
+        self.style.border_radius = Some(radius);
+        self
+    }
+
 }
 
 pub fn rect() -> Element {

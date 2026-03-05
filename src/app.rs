@@ -77,7 +77,7 @@ fn draw_tree(el: &Element, draw: &mut crate::render::draw::DrawContext) {
                 el.style.h,
                 RectParams {
                     color: el.style.fill.to_array(),
-                    radius: 4.0,
+                    radius: el.style.border_radius.unwrap_or(0.0),
                     border_color: el.style.border_color.unwrap_or(Color::BLACK).to_array(),
                     border_width: el.style.border_thickness,
                     clip: None,

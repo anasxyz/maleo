@@ -199,3 +199,32 @@ impl From<Color> for [f32; 4] {
         [c.r, c.g, c.b, c.a]
     }
 }
+
+// front facing
+pub fn rgb(r: u8, g: u8, b: u8) -> Color {
+    Color::rgb(r, g, b)
+}
+
+pub fn rgba(r: u8, g: u8, b: u8, a: u8) -> Color {
+    Color::rgba(r, g, b, a)
+}
+
+pub fn hsl(h: f32, s: f32, l: f32) -> Color {
+    Color::hsl(h, s, l)
+}
+
+pub fn hsla(h: f32, s: f32, l: f32, a: f32) -> Color {
+    Color::hsla(h, s, l, a)
+}
+
+pub fn hwb(h: f32, w: f32, b: f32) -> Color {
+    Color::hwb(h, w, b)
+}
+
+pub fn hwba(h: f32, w: f32, b_val: f32, a: f32) -> Color {
+    Color::hwba(h, w, b_val, a)
+}
+
+pub fn hex(s: &str) -> Color {
+    Color::hex(s)
+}

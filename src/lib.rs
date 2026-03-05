@@ -20,7 +20,7 @@ mod layout;
 
 pub use crate::{
     app::App,
-    color::Color,
+    color::{Color, rgb, rgba, hsl, hsla, hwb, hwba, hex},
     settings::WindowSettings,
     element::*,
 };
