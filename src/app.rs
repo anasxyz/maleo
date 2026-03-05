@@ -15,6 +15,7 @@ use crate::render::{gpu::GpuContext, shape_renderer::RectParams};
 use crate::settings::WindowSettings;
 use crate::window::WindowState;
 use crate::{color::Color, element::Element};
+use crate::layout::layout_tree;
 
 pub trait App: 'static + Sized {
     fn new() -> Self;
@@ -88,18 +89,6 @@ fn draw_tree(el: &Element, draw: &mut crate::render::draw::DrawContext) {
     if let Some(children) = &el.children {
         for child in children {
             draw_tree(child, draw);
-        }
-    }
-}
-
-fn layout_tree(el: &mut Element) {
-    if let Some(children) = &mut el.children {
-        let mut cursor_x = el.style.x;
-        for child in children {
-            child.style.x = cursor_x;
-            child.style.y = el.style.y;
-            cursor_x += child.style.w;
-            layout_tree(child);
         }
     }
 }

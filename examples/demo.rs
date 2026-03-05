@@ -8,11 +8,17 @@ impl App for MyApp {
     }
 
     fn view(&mut self) -> Element {
-        container(vec![
+        col(vec![
             rect().w(100.0).h(200.0).fill(Color::rgb(110, 110, 10)),
-            rect().w(100.0).h(200.0).fill(Color::rgb(110, 10, 10)),
+            row(vec![
+                rect().w(100.0).h(200.0).fill(Color::rgb(110, 10, 10)),
+                rect().w(100.0).h(200.0).fill(Color::rgb(110, 10, 120)),
+            ]),
+            row(vec![
+                rect().w(100.0).h(200.0).fill(Color::rgb(10, 110, 10)),
+                rect().w(100.0).h(200.0).fill(Color::rgb(10, 10, 110)),
+            ]),
         ])
-        .direction("row".to_string())
     }
 }
 

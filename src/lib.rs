@@ -16,6 +16,7 @@ mod settings;
 mod app;
 mod color;
 mod element;
+mod layout;
 
 pub use crate::{
     app::App,

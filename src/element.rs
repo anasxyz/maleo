@@ -3,7 +3,8 @@ use crate::color::Color;
 
 #[derive(Debug)]
 pub enum ElementType {
-    Container,
+    Row,
+    Col,
     Rect,
 }
 
@@ -26,9 +27,6 @@ pub struct ElementStyle {
     pub border_thickness: f32,
     pub border_color: Option<Color>,
     pub border_radius: Option<f32>,
-
-    // layout
-    direction: String,
 }
 
 impl Default for ElementStyle {
@@ -51,9 +49,6 @@ impl Default for ElementStyle {
             border_thickness: 0.0,
             border_color: None,
             border_radius: None,
-
-            // layout
-            direction: String::from("row"),
         }
     }
 }
@@ -107,11 +102,6 @@ impl Element {
         self.style.fill = color;
         self
     }
-
-    pub fn direction(mut self, direction: String) -> Self {
-        self.style.direction = direction;
-        self
-    }
 }
 
 pub fn rect() -> Element {
@@ -121,9 +111,17 @@ pub fn rect() -> Element {
     }
 }
 
-pub fn container(el: Vec<Element>) -> Element {
+pub fn row(el: Vec<Element>) -> Element {
     Element {
-        _type: ElementType::Container,
+        _type: ElementType::Row,
+        children: Some(el),
+        ..Default::default()
+    }
+}
+
+pub fn col(el: Vec<Element>) -> Element {
+    Element {
+        _type: ElementType::Col,
         children: Some(el),
         ..Default::default()
     }
