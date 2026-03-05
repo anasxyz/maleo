@@ -18,7 +18,7 @@ impl App for MyApp {
                 rect().w(100.0).h(200.0).fill(Color::rgb(10, 110, 10)),
                 rect().w(100.0).h(200.0).fill(Color::rgb(10, 10, 110)),
             ]),
-        ])
+        ]).gap(10.0)
     }
 }
 

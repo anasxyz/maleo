@@ -10,7 +10,7 @@ pub enum ElementType {
 
 #[derive(Debug)]
 pub struct ElementStyle {
-    // positional
+    // positional / layout
     pub x: f32,
     pub y: f32,
     pub w: f32,
@@ -21,6 +21,7 @@ pub struct ElementStyle {
     pub max_h: f32,
     pub padding: [f32; 4],
     pub margin: [f32; 4],
+    pub gap: f32,
 
     // visual
     pub fill: Color,
@@ -43,6 +44,7 @@ impl Default for ElementStyle {
             max_h: 0.0,
             padding: [0.0; 4],
             margin: [0.0; 4],
+            gap: 0.0,
 
             // visual
             fill: Color::new(0.0, 0.0, 0.0, 1.0),
@@ -78,6 +80,7 @@ impl Default for Element {
 }
 
 impl Element {
+    // positional / layout
     pub fn w(mut self, w: f32) -> Self {
         self.style.w = w;
         self
@@ -95,6 +98,11 @@ impl Element {
 
     pub fn y(mut self, y: f32) -> Self {
         self.style.y = y;
+        self
+    }
+
+    pub fn gap(mut self, gap: f32) -> Self {
+        self.style.gap = gap;
         self
     }
 

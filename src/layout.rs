@@ -2,16 +2,20 @@ use crate::element::{Element, ElementType};
 
 pub fn layout_tree(el: &mut Element) {
     match el._type {
-        ElementType::Rect => {}
         ElementType::Row => {
             if let Some(children) = &mut el.children {
                 let mut cursor_x = el.style.x;
                 let mut row_height: f32 = 0.0;
-                for child in children {
+                let gap = el.style.gap;
+                let count = children.len();
+                for (i, child) in children.iter_mut().enumerate() {
                     child.style.x = cursor_x;
                     child.style.y = el.style.y;
                     layout_tree(child);
                     cursor_x += child.style.w;
+                    if i < count - 1 {
+                        cursor_x += gap;
+                    }
                     row_height = row_height.max(child.style.h);
                 }
                 el.style.h = row_height;
@@ -21,15 +25,21 @@ pub fn layout_tree(el: &mut Element) {
             if let Some(children) = &mut el.children {
                 let mut cursor_y = el.style.y;
                 let mut col_width: f32 = 0.0;
-                for child in children {
+                let gap = el.style.gap;
+                let count = children.len();
+                for (i, child) in children.iter_mut().enumerate() {
                     child.style.x = el.style.x;
                     child.style.y = cursor_y;
                     layout_tree(child);
                     cursor_y += child.style.h;
+                    if i < count - 1 {
+                        cursor_y += gap;
+                    }
                     col_width = col_width.max(child.style.w);
                 }
                 el.style.w = col_width;
             }
         }
+        _ => {}
     }
 }
