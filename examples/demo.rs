@@ -9,24 +9,24 @@ impl App for MyApp {
 
     fn view(&mut self) -> Element {
         col(vec![
-            rect().w(100.0).h(200.0).bg(rgb(110, 110, 10)),
+            rect().w(Size::Fixed(100.0)).h(Size::Fixed(200.0)).bg(rgb(110, 110, 10)),
             row(vec![
-                rect().w(100.0).h(200.0).bg(rgb(110, 10, 10)),
-                rect().w(100.0).h(200.0).bg(rgb(110, 10, 120)),
+                rect().w(Size::Fixed(100.0)).h(Size::Fixed(200.0)).bg(rgb(110, 10, 10)),
+                rect().w(Size::Fixed(100.0)).h(Size::Fixed(200.0)).bg(rgb(110, 10, 120)),
             ]),
             row(vec![
                 rect()
-                    .w(100.0)
-                    .h(200.0)
+                    .w(Size::Percent(100.0))
+                    .h(Size::Fixed(200.0))
                     .bg(rgb(10, 110, 10)),
                 rect()
-                    .w(100.0)
-                    .h(100.0)
+                    .w(Size::Fixed(100.0))
+                    .h(Size::Fixed(100.0))
                     .bg(rgb(10, 10, 110))
                     .border(3.0)
                     .border_radius(10.0)
                     .border_color(rgb(0, 0, 0))
-            ]),
+            ]).w(Size::Percent(100.0)),
         ])
         .m([10.0, 10.0, 10.0, 10.0])
     }

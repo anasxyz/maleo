@@ -136,6 +136,10 @@ impl<A: App> ApplicationHandler for Runner<A> {
                 // drawing happens here
                 // ...
                 println!("drawing tree");
+                let size = win.window.inner_size();
+                let scale = win.window.scale_factor() as f32;
+                element.style.w = size.width as f32 / scale;
+                element.style.h = size.height as f32 / scale;
                 layout_tree(&mut element);
                 draw_tree(&element, &mut win.draw, None);
 
