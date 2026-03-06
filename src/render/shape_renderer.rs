@@ -86,7 +86,7 @@ impl ShapeRenderer {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("SDF Shape Shader"),
             source: wgpu::ShaderSource::Wgsl(
-                include_str!("../../shaders/rounded_rect.wgsl").into(),
+                include_str!("../../shaders/rect.wgsl").into(),
             ),
         });
 
