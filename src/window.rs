@@ -19,8 +19,8 @@ impl WindowState {
         let draw = DrawContext::new(
             &gpu.device,
             gpu.format,
-            size.width as f32,
-            size.height as f32,
+            size.width as f32 / scale as f32,  // logical
+            size.height as f32 / scale as f32, // logical
             scale as f32,
         );
         Self {

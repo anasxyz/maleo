@@ -345,7 +345,7 @@ pub fn col(children: Vec<Element>) -> Element {
 
 pub fn print_tree(el: &Element, prefix: &str, last: bool) {
     let connector = if last { "└── " } else { "├── " };
-    println!("{}{}{}", prefix, connector, el);
+    println!("{}{}{} ({}, {}) {}x{}", prefix, connector, el, el.style.x, el.style.y, el.style.w, el.style.h);
     if let Some(children) = &el.children {
         let extension = if last { "    " } else { "│   " };
         let new_prefix = format!("{}{}", prefix, extension);
@@ -357,7 +357,7 @@ pub fn print_tree(el: &Element, prefix: &str, last: bool) {
 }
 
 pub fn print_root(el: &Element) {
-    println!("{}", el);
+    println!("{} ({}, {}) {}x{}", el, el.style.x, el.style.y, el.style.w, el.style.h);
     if let Some(children) = &el.children {
         let count = children.len();
         for (i, child) in children.iter().enumerate() {

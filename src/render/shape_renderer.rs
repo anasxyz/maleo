@@ -71,14 +71,17 @@ pub struct ShapeRenderer {
     instances: Vec<Instance>,
     screen_width: f32,
     screen_height: f32,
+    scale: f32,
 }
 
 impl ShapeRenderer {
     pub fn new(
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
+        // logical pixels
         width: f32,
         height: f32,
+        scale: f32,
     ) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("SDF Shape Shader"),
@@ -136,8 +139,9 @@ impl ShapeRenderer {
             pipeline,
             instance_buffer,
             instances: Vec::with_capacity(cap),
-            screen_width: width,
-            screen_height: height,
+            screen_width: width * scale,
+            screen_height: height * scale,
+            scale,
         }
     }
 
@@ -145,31 +149,45 @@ impl ShapeRenderer {
         self.instances.clear();
     }
 
+    // takes logical pixels
     pub fn resize(&mut self, width: f32, height: f32) {
-        self.screen_width = width;
-        self.screen_height = height;
+        self.screen_width = width * self.scale;
+        self.screen_height = height * self.scale;
     }
 
-    pub fn draw_rect(&mut self, x: f32, y: f32, w: f32, h: f32, p: RectParams) {
-        let color = p.color;
-        let radius = p.radius;
-        let border_color = p.border_color;
-        let border_width = p.border_width;
-        let clip = p.clip;
-        let radius = radius.min(w * 0.5).min(h * 0.5);
-        let clip_arr = clip.unwrap_or([0.0; 4]);
+    pub fn set_scale(&mut self, scale: f32, width: f32, height: f32) {
+        self.scale = scale;
+        self.screen_width = width * scale;
+        self.screen_height = height * scale;
+    }
 
-        if let Some([cx, cy, cx2, cy2]) = clip {
-            if x + w <= cx || y + h <= cy || x >= cx2 || y >= cy2 {
-                return;
+    // all inputs in logical pixels
+    pub fn draw_rect(&mut self, x: f32, y: f32, w: f32, h: f32, p: RectParams) {
+        let s = self.scale;
+        let px = x * s;
+        let py = y * s;
+        let pw = w * s;
+        let ph = h * s;
+        let radius = (p.radius * s).min(pw * 0.5).min(ph * 0.5);
+        let border_width = p.border_width * s;
+
+        let clip_arr = match p.clip {
+            Some([cx, cy, cx2, cy2]) => {
+                // early out in logical space
+                if x + w <= cx || y + h <= cy || x >= cx2 || y >= cy2 {
+                    return;
+                }
+                // scale clip to physical
+                [cx * s, cy * s, cx2 * s, cy2 * s]
             }
-        }
+            None => [0.0; 4],
+        };
 
         self.instances.push(Instance {
-            pos_size: [x, y, w, h],
+            pos_size: [px, py, pw, ph],
             params: [radius, border_width, 1.0, 0.0],
-            fill_color: color,
-            border_color,
+            fill_color: p.color,
+            border_color: p.border_color,
             clip: clip_arr,
             screen_size: [self.screen_width, self.screen_height, 0.0, 0.0],
         });

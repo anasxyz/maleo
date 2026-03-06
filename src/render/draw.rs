@@ -3,7 +3,6 @@ use wgpu;
 
 pub struct DrawContext {
     shapes: ShapeRenderer,
-    scale: f32,
 }
 
 impl DrawContext {
@@ -15,32 +14,22 @@ impl DrawContext {
         scale: f32,
     ) -> Self {
         Self {
-            shapes: ShapeRenderer::new(device, format, width, height),
-            scale,
+            shapes: ShapeRenderer::new(device, format, width, height, scale),
         }
     }
 
-    pub fn set_scale(&mut self, scale: f32) {
-        self.scale = scale;
+    // logical pixels
+    pub fn resize(&mut self, width: f32, height: f32) {
+        self.shapes.resize(width, height);
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
-        self.shapes.resize(width as f32, height as f32);
+    pub fn set_scale(&mut self, scale: f32, width: f32, height: f32) {
+        self.shapes.set_scale(scale, width, height);
     }
 
+    // all inputs in logical pixels
     pub fn draw_rect(&mut self, x: f32, y: f32, w: f32, h: f32, p: RectParams) {
-        let s = self.scale;
-        self.shapes.draw_rect(
-            x * s,
-            y * s,
-            w * s,
-            h * s,
-            RectParams {
-                radius: p.radius * s,
-                border_width: p.border_width * s,
-                ..p
-            },
-        );
+        self.shapes.draw_rect(x, y, w, h, p);
     }
 
     pub fn render<'pass>(

@@ -128,9 +128,6 @@ impl<A: App> ApplicationHandler for Runner<A> {
             WindowEvent::RedrawRequested => {
                 let mut element = self.app.view();
 
-                // print whole element tree
-                print_root(&element);
-
                 win.begin();
 
                 // drawing happens here
@@ -138,19 +135,28 @@ impl<A: App> ApplicationHandler for Runner<A> {
                 println!("drawing tree");
                 let size = win.window.inner_size();
                 let scale = win.window.scale_factor() as f32;
-                element.style.w = size.width as f32 / scale;
-                element.style.h = size.height as f32 / scale;
-                layout_tree(&mut element);
+                let logical_w = size.width as f32 / scale;
+                let logical_h = size.height as f32 / scale;
+                layout_tree(&mut element, logical_w, logical_h);
                 draw_tree(&element, &mut win.draw, None);
+
+                // print whole element tree
+                print_root(&element);
 
                 win.render();
             }
             WindowEvent::Resized(size) => {
+                let scale = win.window.scale_factor() as f32;
                 win.gpu.resize(size.width, size.height);
-                win.draw.resize(size.width, size.height);
+                win.draw
+                    .resize(size.width as f32 / scale, size.height as f32 / scale);
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                win.draw.set_scale(scale_factor as f32);
+                let size = win.window.inner_size();
+                let scale = scale_factor as f32;
+                win.gpu.resize(size.width, size.height);
+                win.draw
+                    .set_scale(scale, size.width as f32 / scale, size.height as f32 / scale);
             }
             WindowEvent::CloseRequested => {
                 self.windows.remove(&id);
