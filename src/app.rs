@@ -10,12 +10,13 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::element::{ElementType, print_root};
+use crate::element::{ElementType, Position, print_root};
 use crate::layout::layout_tree;
 use crate::render::{gpu::GpuContext, shape_renderer::RectParams};
 use crate::settings::WindowSettings;
 use crate::window::WindowState;
 use crate::{color::Color, element::Element};
+use crate::draw::draw_tree;
 
 pub trait App: 'static + Sized {
     fn new() -> Self;
@@ -67,51 +68,6 @@ impl<A: App> Runner<A> {
     }
 }
 
-fn clip_intersect(a: Option<[f32; 4]>, b: Option<[f32; 4]>) -> Option<[f32; 4]> {
-    match (a, b) {
-        (Some([ax, ay, ax2, ay2]), Some([bx, by, bx2, by2])) => {
-            Some([ax.max(bx), ay.max(by), ax2.min(bx2), ay2.min(by2)])
-        }
-        (Some(a), None) => Some(a),
-        (None, Some(b)) => Some(b),
-        (None, None) => None,
-    }
-}
-
-fn draw_tree(el: &Element, draw: &mut crate::render::draw::DrawContext, clip: Option<[f32; 4]>) {
-    match el._type {
-        ElementType::Rect => {
-            draw.draw_rect(
-                el.style.x,
-                el.style.y,
-                el.style.w,
-                el.style.h,
-                RectParams {
-                    color: el.style.fill.to_array(),
-                    radius: el.style.border_radius.unwrap_or(0.0),
-                    border_color: el.style.border_color.unwrap_or(Color::BLACK).to_array(),
-                    border_width: el.style.border_thickness,
-                    clip,
-                },
-            );
-        }
-        ElementType::Row | ElementType::Col => {
-            let my_clip = Some([
-                el.style.x,
-                el.style.y,
-                el.style.x + el.style.w,
-                el.style.y + el.style.h,
-            ]);
-            let child_clip = clip_intersect(clip, my_clip);
-            if let Some(children) = &el.children {
-                for child in children {
-                    draw_tree(child, draw, child_clip);
-                }
-            }
-        }
-    }
-}
-
 impl<A: App> ApplicationHandler for Runner<A> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let settings = self.init.clone();
@@ -130,17 +86,13 @@ impl<A: App> ApplicationHandler for Runner<A> {
 
                 win.begin();
 
-                // drawing happens here
-                // ...
-                println!("drawing tree");
                 let size = win.window.inner_size();
                 let scale = win.window.scale_factor() as f32;
                 let logical_w = size.width as f32 / scale;
                 let logical_h = size.height as f32 / scale;
                 layout_tree(&mut element, logical_w, logical_h);
-                draw_tree(&element, &mut win.draw, None);
+                draw_tree(&element, &mut win.draw);
 
-                // print whole element tree
                 print_root(&element);
 
                 win.render();

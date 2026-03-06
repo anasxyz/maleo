@@ -8,7 +8,7 @@ mod render {
     pub mod shadow_renderer;
     pub mod shape_renderer;
     pub mod text_renderer;
-    pub mod draw;
+    pub mod draw_ctx;
 }
 
 mod window;
@@ -17,6 +17,7 @@ mod app;
 mod color;
 mod element;
 mod layout;
+mod draw;
 
 pub use crate::{
     app::App,
