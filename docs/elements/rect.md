@@ -2,7 +2,7 @@
 A plain rectangle with no children.
 
 ## Properties
-> For all property info, see [Element Property Reference](element_props.md)
+> For all property info, see [Element Properties](../element_props.md)
 
 ### Sizing
 `.w()` `.h()` `.min_w()` `.min_h()` `.max_w()` `.max_h()` `.aspect_ratio()`   
